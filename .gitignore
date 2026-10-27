@@ -1,0 +1,22 @@
+# Secrets — never commit
+.env
+*.env
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# Home Assistant runtime
+ha/*.db
+ha/*.log
+ha/.storage/
+ha/deps/
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/

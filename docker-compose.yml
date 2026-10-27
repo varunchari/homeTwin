@@ -1,0 +1,56 @@
+services:
+  ha:
+    # Pinned at deploy time; resolved tag recorded in docs/versions.md
+    image: ghcr.io/home-assistant/home-assistant:${HA_IMAGE_TAG:-stable}
+    container_name: hometwin-ha
+    # No published ports: only the backend proxy talks to HA, over this network.
+    volumes:
+      - ./ha:/config
+    env_file:
+      - .env
+    environment:
+      - TZ=UTC
+    restart: unless-stopped
+    networks:
+      - internal
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: hometwin-backend
+    # No published ports: Caddy is the only thing on 80/443.
+    env_file:
+      - .env
+    environment:
+      - HA_URL=http://ha:8123
+    depends_on:
+      - ha
+    restart: unless-stopped
+    networks:
+      - internal
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: hometwin-caddy
+    env_file:
+      - .env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - internal
+
+networks:
+  internal:
+
+volumes:
+  caddy_data:
+  caddy_config:

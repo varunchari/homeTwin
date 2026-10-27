@@ -1,0 +1,67 @@
+# HomeTwin Day 1 — virtual devices. Real HA engine, virtual entities for demo.
+# Physical rollout swaps entity IDs; same API.
+# Uses the modern `template:` integration format (required by current HA Core).
+homeassistant:
+  name: HomeTwin Demo
+  unit_system: metric
+  time_zone: UTC
+
+recorder:
+  purge_keep_days: 2
+
+# Baseline inputs (frozen baseline for one-click reset on Day 3)
+input_boolean:
+  lamp_floor_on:
+    name: Floor lamp input
+    initial: off
+  string_lights_on:
+    name: String lights input
+    initial: off
+  reading_light_on:
+    name: Reading light input
+    initial: off
+  patio_door_open:
+    name: Patio door input
+    initial: off
+  # Blind is optional, only if free:
+  # blind_open:
+  #   name: Blind input
+  #   initial: off
+
+template:
+  - light:
+      - name: Floor lamp
+        unique_id: floor_lamp
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.lamp_floor_on
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.lamp_floor_on
+      - name: String lights
+        unique_id: string_lights
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.string_lights_on
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.string_lights_on
+      - name: Reading light
+        unique_id: reading_light
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.reading_light_on
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.reading_light_on
+  - binary_sensor:
+      - name: Patio door
+        unique_id: patio_door
+        device_class: door
+        state: "{{ is_state('input_boolean.patio_door_open', 'on') }}"
