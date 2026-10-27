@@ -9,8 +9,9 @@ Generated dummy room for HomeTwin development and demo. Rights-clean. No proprie
 - Glass patio door, right with dark frame → door sensor. Prompt: "patio door".
 - Roller blind on side window → optional blind entity only if free.
 - Wall-mounted TV above sofa → display/status target. Prompt: "tv".
-- Smart speaker/display on coffee table → voice interaction target. Prompt: "smart speaker".
-- Reading light on side table beside sofa on left wall → `light 3`. Prompt: "reading light".
+- Smart display on coffee table → voice interaction target. Prompt: "smart display" (SAM may label it display/tablet — any label is fine).
+- Reading light on side table in the window reading nook → `light 3`. Prompt: "reading light".
+- Gray pouf under the window → decor, not a device (no binding).
 
 ## Demo coverage
 

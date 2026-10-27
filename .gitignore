@@ -10,6 +10,8 @@ __pycache__/
 .venv/
 *.egg-info/
 
+# Backend runtime (SQLite, uploads, masks, call logs)
+data/
 # Home Assistant runtime
 ha/*.db
 ha/*.log

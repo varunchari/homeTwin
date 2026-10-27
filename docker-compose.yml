@@ -20,10 +20,13 @@ services:
       dockerfile: backend/Dockerfile
     container_name: hometwin-backend
     # No published ports: Caddy is the only thing on 80/443.
+    volumes:
+      - backend_data:/app/data
+    environment:
+      - DATA_DIR=/app/data
+      - HA_URL=http://ha:8123
     env_file:
       - .env
-    environment:
-      - HA_URL=http://ha:8123
     depends_on:
       - ha
     restart: unless-stopped
@@ -54,3 +57,4 @@ networks:
 volumes:
   caddy_data:
   caddy_config:
+  backend_data:

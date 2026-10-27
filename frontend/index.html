@@ -3,14 +3,52 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>HomeTwin — Day 1 skeleton</title>
+  <title>HomeTwin — spatial home studio</title>
   <link rel="stylesheet" href="/static/app.css" />
 </head>
 <body>
-  <h1>HomeTwin</h1>
-  <p id="status">Connecting…</p>
-  <ul id="entities"></ul>
-  <!-- Day 2+: room photo, SAM masks, scene graph. Day 3+: binding, tap-to-control. -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark"></span>
+      <span class="brand-name">HomeTwin</span>
+      <span class="brand-sub">spatial home studio</span>
+    </div>
+    <div id="status" class="live-pill">Connecting…</div>
+  </header>
+
+  <main class="layout">
+    <section class="canvas-card">
+      <div class="canvas-toolbar">
+        <label class="file-btn">Upload photo
+          <input type="file" id="photo-input" accept="image/jpeg,image/png" hidden />
+        </label>
+        <button id="upload-btn" class="btn">Use photo</button>
+        <input id="phrase-input" placeholder="Concept phrase — e.g. lamp" />
+        <button id="segment-btn" class="btn primary">Segment</button>
+        <button id="draw-btn" class="btn">Draw region</button>
+      </div>
+      <div id="phrase-chips" class="chips"></div>
+      <div id="photo-wrap">
+        <img id="photo" alt="Room photo" hidden />
+        <div id="regions"></div>
+        <div id="photo-empty">Upload the demo room photo to begin.<br />Tap a glowing region to select it.</div>
+      </div>
+      <p id="photo-msg"></p>
+    </section>
+
+    <aside class="panel">
+      <section>
+        <h2>Regions</h2>
+        <ul id="region-list" class="chips"></ul>
+      </section>
+      <section>
+        <h2>Devices</h2>
+        <ul id="entities" class="devices"></ul>
+      </section>
+    </aside>
+  </main>
+
+  <!-- Day 3: binding, tap-to-control. Day 4: draw-to-automate. -->
   <script src="/static/app.js"></script>
 </body>
 </html>
