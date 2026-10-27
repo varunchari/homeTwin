@@ -55,6 +55,17 @@
         <ul id="proposal-list" class="proposals"></ul>
       </section>
       <section>
+        <h2>Automate</h2>
+        <div id="auto-row">
+          <select id="source-select" title="Trigger region"></select>
+          <span class="arrow">→</span>
+          <select id="target-select" title="Action region"></select>
+        </div>
+        <input id="auto-text" placeholder="Instruction — e.g. after sunset, off after a minute" />
+        <button id="plan-btn" class="btn primary">Generate plan</button>
+        <div id="plan-view"></div>
+      </section>
+      <section>
         <h2>Regions</h2>
         <ul id="region-list" class="chips"></ul>
       </section>

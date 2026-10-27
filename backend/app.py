@@ -606,6 +606,100 @@ async def suggest_bindings(photo_id: int) -> dict:
     return {"photo_id": photo_id, "proposals": proposals, "latency_ms": latency_ms}
 
 
+# --- Day 4: Spark AutomationIR, deterministic compile, approval ---
+
+class ProposeRequest(BaseModel):
+    photo_id: int
+    source_object_id: str
+    target_object_id: str
+    text: str = ""
+
+
+@app.post("/api/automations/propose")
+async def propose_automation(req: ProposeRequest) -> dict:
+    """Gesture + text -> Spark AutomationIR -> validate -> compile.
+
+    Nothing is written to HA here. The returned proposal must be approved
+    before any write. Invalid plans return 422 with plain-language reasons.
+    """
+    import time
+    from automation import (IR_SCHEMA, IR_SYSTEM, build_ir_prompt, compile_ir,
+                            validate_ir)
+    from spark_client import SparkError, complete_json
+    import store as store_module
+
+    graph = scene_graph(req.photo_id)
+    if not graph:
+        raise HTTPException(status_code=404, detail="unknown photo")
+    _region_or_404(req.photo_id, req.source_object_id)
+    _region_or_404(req.photo_id, req.target_object_id)
+    bindings = graph["bindings"]
+    if req.source_object_id not in bindings:
+        raise HTTPException(status_code=409, detail="source region is not bound yet")
+    if req.target_object_id not in bindings:
+        raise HTTPException(status_code=409, detail="target region is not bound yet")
+    source_entity = bindings[req.source_object_id]
+    target_entity = bindings[req.target_object_id]
+    registry = {s.get("entity_id") for s in await _ha_states()}
+
+    t0 = time.monotonic()
+    try:
+        ir = await complete_json(
+            IR_SYSTEM, build_ir_prompt(source_entity, target_entity, req.text),
+            IR_SCHEMA)
+    except SparkError as e:
+        raise HTTPException(status_code=502, detail=f"Spark failed: {e}")
+    latency_ms = int((time.monotonic() - t0) * 1000)
+    _spark_log(req.photo_id, latency_ms, 1, "ir", [ir])
+
+    reasons = validate_ir(ir, registry)
+    if reasons:
+        raise HTTPException(status_code=422, detail="; ".join(reasons))
+    proposal_id = store_module.save_proposal(
+        req.photo_id, req.source_object_id, req.target_object_id, req.text, ir,
+        compile_ir(ir, alias=f"HomeTwin {req.source_object_id} to {req.target_object_id}"))
+    proposal = store_module.get_proposal(proposal_id)
+    return {"proposal_id": proposal_id, "ir": ir,
+            "compiled": proposal["compiled"], "latency_ms": latency_ms,
+            "approval_required": True}
+
+
+@app.post("/api/automations/{proposal_id}/approve")
+async def approve_automation(proposal_id: int) -> dict:
+    """Approval-gated deploy: re-validate, write to HA via the automation
+    config API, read back to confirm. First live use is Day 5; Day 4
+    exercises propose/validate plus this path against fakes."""
+    from automation import validate_ir
+    import store as store_module
+
+    proposal = store_module.get_proposal(proposal_id)
+    if not proposal:
+        raise HTTPException(status_code=404, detail="unknown proposal")
+    if proposal["status"] == "deployed":
+        return {"ok": True, "proposal_id": proposal_id, "already": True}
+    registry = {s.get("entity_id") for s in await _ha_states()}
+    reasons = validate_ir(proposal["ir"], registry)
+    if reasons:
+        store_module.set_proposal_status(proposal_id, "rejected")
+        raise HTTPException(status_code=422, detail="; ".join(reasons))
+    automation_id = f"hometwin_{proposal_id}"
+    payload = {"id": automation_id, **proposal["compiled"]}
+    async with httpx.AsyncClient(timeout=15) as client:
+        put = await client.post(f"{HA_URL}/api/config/automation/config/{automation_id}",
+                                headers=_headers(), json=payload)
+        if put.status_code not in (200, 201):
+            raise HTTPException(status_code=502,
+                                detail=f"HA deploy failed: {put.status_code}")
+        read = await client.get(
+            f"{HA_URL}/api/config/automation/config/{automation_id}",
+            headers=_headers())
+    if read.status_code != 200:
+        raise HTTPException(status_code=502, detail="HA read-back failed")
+    store_module.set_proposal_status(proposal_id, "deployed")
+    return {"ok": True, "proposal_id": proposal_id,
+            "automation_id": automation_id, "read_back": read.json()}
+
+
 @app.post("/api/reset")
 async def reset_baseline() -> dict:
     """One-click return to the frozen baseline: every demo input off, every light off."""

@@ -46,6 +46,17 @@ CREATE TABLE IF NOT EXISTS bindings (
   created REAL NOT NULL,
   PRIMARY KEY (photo_id, object_id)
 );
+CREATE TABLE IF NOT EXISTS proposals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  photo_id INTEGER NOT NULL,
+  source_id TEXT NOT NULL,
+  target_id TEXT NOT NULL,
+  text TEXT NOT NULL,
+  ir TEXT NOT NULL,
+  compiled TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created REAL NOT NULL
+);
 """
 
 
@@ -201,6 +212,49 @@ def delete_binding(photo_id: int, object_id: str) -> bool:
             (photo_id, object_id))
         conn.commit()
         return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def save_proposal(photo_id: int, source_id: str, target_id: str, text: str,
+                  ir: dict, compiled: dict) -> int:
+    import json
+    import time
+    conn = connect()
+    try:
+        cur = conn.execute(
+            "INSERT INTO proposals (photo_id, source_id, target_id, text, ir,"
+            " compiled, status, created) VALUES (?,?,?,?,?,?, 'pending', ?)",
+            (photo_id, source_id, target_id, text,
+             json.dumps(ir), json.dumps(compiled), time.time()),
+        )
+        conn.commit()
+        return cur.lastrowid
+    finally:
+        conn.close()
+
+
+def get_proposal(proposal_id: int) -> dict | None:
+    import json
+    conn = connect()
+    try:
+        row = conn.execute("SELECT * FROM proposals WHERE id=?",
+                           (proposal_id,)).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["ir"] = json.loads(d["ir"])
+        d["compiled"] = json.loads(d["compiled"])
+        return d
+    finally:
+        conn.close()
+
+
+def set_proposal_status(proposal_id: int, status: str) -> None:
+    conn = connect()
+    try:
+        conn.execute("UPDATE proposals SET status=? WHERE id=?", (status, proposal_id))
+        conn.commit()
     finally:
         conn.close()
 

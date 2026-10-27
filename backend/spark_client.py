@@ -26,11 +26,18 @@ def _api_key() -> str:
 
 
 async def complete_json(system: str, user: str, schema: dict,
-                        model: str = SPARK_MODEL) -> dict:
-    """One chat completion constrained to `schema`. Returns parsed JSON."""
+                        model: str = SPARK_MODEL,
+                        api_base: str | None = None,
+                        api_key: str | None = None) -> dict:
+    """One chat completion constrained to `schema`. Returns parsed JSON.
+
+    `api_base`/`api_key` override the Meta Model API defaults — the Baseten
+    A/B path passes the open-weight endpoint here. Same prompt, same schema.
+    """
     from openai import AsyncOpenAI
 
-    client = AsyncOpenAI(base_url=SPARK_BASE_URL, api_key=_api_key())
+    client = AsyncOpenAI(base_url=api_base or SPARK_BASE_URL,
+                         api_key=api_key or _api_key())
     try:
         resp = await client.chat.completions.create(
             model=model,

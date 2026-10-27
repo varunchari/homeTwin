@@ -19,5 +19,11 @@ Stage 1 is pass/fail on real Meta model usage. A mock scores zero on Meta Toolin
 | 2 | sam-3.1 | `smart display` on photo 7 (fallback live check) | — | matched as `display`, 2 regions (verification dupes pruned after) | phrase-fallback retry works end to end | ~$0.005 |
 | 3 | muse-spark-1.3 | binding-match on photo 7 (lamp unbound) | ~10.8 s | 1 proposal: lamp → light.reading_light (0.9, spatial reasoning) | landmark prompt fixed an earlier floor_lamp misguess | judging-evidence pending |
 | 3 | muse-spark-1.3 | binding-match rows in `spark_calls.jsonl` (host) | — | model, latency, proposals, raw ids per call | same provenance rule as SAM log | — |
+| 4 | muse-spark-1.3 | IR pattern 1: door → reading light, no text | — | valid, 1 action, no condition | live propose, no deploy | judging-evidence pending |
+| 4 | muse-spark-1.3 | IR pattern 2: door → floor lamp, "after sunset" | — | valid, sun-after-sunset condition compiled | live propose, no deploy | judging-evidence pending |
+| 4 | muse-spark-1.3 | IR pattern 3: door → string lights, "off after a minute" | — | valid, 60s delay compiled | live propose, no deploy | judging-evidence pending |
+| 4 | muse-spark-1.3 | invalid probes (lock text, unknown entity, unbound source) | — | model stayed in allowlist; gates returned 409; forced-bad IR rejected 422 in suite | validator proven in kept tests | $0.00 extra |
+| 4 | muse-spark-open-1026 (Baseten) | A/B round 1: same 4-case IR suite | 2.5–6.2 s | 3/4 valid; delay case emitted `sun:null`, validator-caught | safety net worked as designed | Baseten $$$ |
+| 4 | both providers | A/B round 2 after explicit-null normalization | 3.8–5.0 s | 4/4 valid each; same prompt/schema/validator | DECISION FINAL: comparable, bonus claimed | — |
 
 Baseten A/B rows (Oct 30 only): record model string as shown in the Baseten dashboard, provider, valid-rate, latency per provider.

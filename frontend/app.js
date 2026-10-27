@@ -110,6 +110,7 @@ async function refreshGraph() {
   const graph = await res.json();
   bindings = graph.bindings || {};
   renderRegions(graph.regions);
+  refreshAutoSelects(Object.keys(bindings));
   if (selectedId) showSelected(selectedId);
 }
 
@@ -126,6 +127,71 @@ function showSelected(objectId) {
   const bound = bindings[objectId];
   info.textContent = bound ? `${objectId} → ${bound}` : `${objectId} (unbound)`;
 }
+
+const sourceSelect = document.getElementById("source-select");
+const targetSelect = document.getElementById("target-select");
+const autoText = document.getElementById("auto-text");
+const planView = document.getElementById("plan-view");
+function refreshAutoSelects(boundIds) {
+  for (const sel of [sourceSelect, targetSelect]) {
+    const keep = sel.value;
+    sel.innerHTML = "";
+    for (const id of boundIds) {
+      const opt = document.createElement("option");
+      opt.value = id;
+      opt.textContent = `${id} → ${bindings[id]}`;
+      sel.appendChild(opt);
+    }
+    if (boundIds.includes(keep)) sel.value = keep;
+  }
+}
+document.getElementById("plan-btn").addEventListener("click", async () => {
+  if (!photoId) { say("Upload a photo first."); return; }
+  if (!sourceSelect.value || !targetSelect.value) { say("Bind regions first."); return; }
+  say("Asking Spark for an automation plan…");
+  planView.innerHTML = "";
+  const res = await fetch("/api/automations/propose", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      photo_id: photoId,
+      source_object_id: sourceSelect.value,
+      target_object_id: targetSelect.value,
+      text: autoText.value,
+    }),
+  });
+  const body = await res.json();
+  if (!res.ok) {
+    const div = document.createElement("div");
+    div.className = "plan rejected";
+    div.textContent = `Rejected: ${body.detail || res.status}. No HA write happened.`;
+    planView.appendChild(div);
+    say("Plan rejected — see Automate panel.");
+    return;
+  }
+  const div = document.createElement("div");
+  div.className = "plan";
+  const ir = body.ir;
+  const cond = ir.condition ? ` when sun ${ir.condition.sun.replace("_", " ")}` : "";
+  const delay = ir.delay_s ? `, off after ${ir.delay_s}s` : "";
+  div.innerHTML = `<strong>${ir.description || "Automation plan"}</strong>` +
+    `<br />${ir.trigger.entity_id} → ${ir.action.entity_id}${cond}${delay}` +
+    `<br /><span class="muted">Compiled ${body.compiled.trigger.length} trigger(s), ` +
+    `${body.compiled.action.length} action step(s) in ${body.latency_ms} ms. ` +
+    `Approval required before deploy.</span>`;
+  const btn = document.createElement("button");
+  btn.className = "btn primary";
+  btn.textContent = "Approve & deploy";
+  btn.addEventListener("click", async () => {
+    const r2 = await fetch(`/api/automations/${body.proposal_id}/approve`, { method: "POST" });
+    const b2 = await r2.json();
+    say(r2.ok ? `Deployed ${b2.automation_id}.` : `Deploy failed: ${b2.detail || r2.status}`);
+  });
+  div.appendChild(document.createElement("br"));
+  div.appendChild(btn);
+  planView.appendChild(div);
+  say("Plan ready — review and approve to deploy.");
+});
 
 async function tapSelected() {
   if (!photoId || !selectedId) return;
