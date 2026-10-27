@@ -20,7 +20,10 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from sam_client import SAM_MODEL, SamError, segment_image
-from store import DATA_DIR, DB_PATH, MASKS_DIR, PHOTOS_DIR, add_photo, add_region, get_photo, scene_graph
+from store import (DATA_DIR, DB_PATH, MASKS_DIR, PHOTOS_DIR, add_photo, add_region,
+                     delete_binding, delete_phrase_regions, find_photo_by_sha,
+                     get_binding, get_photo, list_bindings, scene_graph,
+                     set_binding, set_photo_sha)
 
 SAM_EST_COST_USD = 0.0025  # $2.50/1k images; one request bills one image (assumption)
 
@@ -211,6 +214,11 @@ def _log_sam_call(**row) -> None:
 
 @app.post("/api/photos")
 async def upload_photo(file: UploadFile) -> dict:
+    """Upload a photo, use it directly, and auto-segment all suggested phrases.
+
+    Same bytes re-uploaded return the existing photo (no duplicate SAM spend).
+    """
+    import hashlib
     from io import BytesIO
     from PIL import Image
     raw = await file.read()
@@ -221,11 +229,32 @@ async def upload_photo(file: UploadFile) -> dict:
     except Exception:
         raise HTTPException(status_code=415, detail="unreadable image (JPEG/PNG only)")
     width, height = img.size
-    photo_id = add_photo(file.filename or "photo", width, height)
     buf = BytesIO()
     img.save(buf, "JPEG", quality=92)
-    (PHOTOS_DIR / f"{photo_id}.jpg").write_bytes(buf.getvalue())
-    return {"photo_id": photo_id, "width": width, "height": height}
+    jpeg = buf.getvalue()
+    sha = hashlib.sha256(jpeg).hexdigest()
+    existing = find_photo_by_sha(sha)
+    if existing and (PHOTOS_DIR / f"{existing['id']}.jpg").is_file():
+        graph = scene_graph(existing["id"])
+        return {"photo_id": existing["id"], "width": existing["width"],
+                "height": existing["height"], "reused": True,
+                "regions": graph["regions"], "bindings": graph["bindings"]}
+    photo_id = add_photo(file.filename or "photo", width, height)
+    (PHOTOS_DIR / f"{photo_id}.jpg").write_bytes(jpeg)
+    set_photo_sha(photo_id, sha)
+    photo = get_photo(photo_id)
+    auto = []
+    for phrase in SAM_PHRASES:
+        try:
+            auto.append(await _run_segmentation(photo_id, photo, jpeg, phrase))
+        except SamError as e:
+            auto.append({"phrase": phrase, "matched_phrase": None,
+                         "latency_ms": 0, "regions": [],
+                         "note": f"SAM failed: {e}. Use manual fallback."})
+    graph = scene_graph(photo_id)
+    return {"photo_id": photo_id, "width": width, "height": height, "reused": False,
+            "auto_segment": auto, "regions": graph["regions"],
+            "bindings": graph["bindings"]}
 
 
 @app.get("/api/photos/{photo_id}/image")
@@ -275,13 +304,11 @@ def _dedupe(rels: list[tuple]) -> list[dict]:
     return merged
 
 
-@app.post("/api/photos/{photo_id}/segment")
-async def segment_photo(photo_id: int, req: SegmentRequest) -> dict:
+async def _run_segmentation(photo_id: int, photo: dict, raw: bytes,
+                            phrase: str) -> dict:
+    """Run one phrase (with tail fallback), store regions. Shared by the
+    segment endpoint and upload auto-segment."""
     import time
-    photo, raw = _photo_bytes(photo_id)
-    phrase = " ".join(req.phrase.split())
-    if not phrase:
-        raise HTTPException(status_code=422, detail="empty phrase")
     matched: str | None = None
     found: list = []
     total_ms = 0
@@ -294,7 +321,7 @@ async def segment_photo(photo_id: int, req: SegmentRequest) -> dict:
                           latency_ms=int((time.monotonic() - t0) * 1000),
                           n_regions=0, status=f"error: {e}",
                           est_cost_usd=SAM_EST_COST_USD)
-            raise HTTPException(status_code=502, detail=f"SAM failed: {e}. Use manual fallback.")
+            raise SamError(str(e))
         latency_ms = int((time.monotonic() - t0) * 1000)
         total_ms += latency_ms
         if found:
@@ -307,9 +334,11 @@ async def segment_photo(photo_id: int, req: SegmentRequest) -> dict:
                       latency_ms=latency_ms, n_regions=0, status="ok-empty",
                       est_cost_usd=SAM_EST_COST_USD)
     if matched is None:
-        return {"photo_id": photo_id, "phrase": phrase, "matched_phrase": None,
-                "latency_ms": total_ms, "regions": [], "suggested_phrases": SAM_PHRASES,
-                "note": "No match for any variant. Draw the region manually."}
+        return {"phrase": phrase, "matched_phrase": None,
+                "latency_ms": total_ms, "regions": []}
+    # Refresh semantics: re-segmenting a phrase replaces its regions instead
+    # of duplicating them. Bindings to vanished object_ids are dropped.
+    removed = delete_phrase_regions(photo_id, matched)
     rels = []
     for item in found:
         rel = _to_relative(item["bbox"], item["mask_png"], photo["width"], photo["height"])
@@ -320,9 +349,271 @@ async def segment_photo(photo_id: int, req: SegmentRequest) -> dict:
     for entry in _dedupe(rels):
         regions.append(add_region(photo_id, "sam", matched, *entry["rel"],
                                   mask_png=entry["mask_png"]))
-    return {"photo_id": photo_id, "phrase": phrase, "matched_phrase": matched,
+    kept = {r["object_id"] for r in regions}
+    dropped_bindings = [o for o in removed if o not in kept and delete_binding(photo_id, o)]
+    return {"phrase": phrase, "matched_phrase": matched,
             "latency_ms": total_ms, "regions": regions,
-            "suggested_phrases": SAM_PHRASES}
+            "replaced": len(removed), "dropped_bindings": dropped_bindings}
+
+
+@app.post("/api/photos/{photo_id}/segment")
+async def segment_photo(photo_id: int, req: SegmentRequest) -> dict:
+    photo, raw = _photo_bytes(photo_id)
+    phrase = " ".join(req.phrase.split())
+    if not phrase:
+        raise HTTPException(status_code=422, detail="empty phrase")
+    try:
+        result = await _run_segmentation(photo_id, photo, raw, phrase)
+    except SamError as e:
+        raise HTTPException(status_code=502, detail=f"SAM failed: {e}. Use manual fallback.")
+    if not result["regions"]:
+        return {"photo_id": photo_id, **result, "suggested_phrases": SAM_PHRASES,
+                "note": "No match for any variant. Draw the region manually."}
+    return {"photo_id": photo_id, **result, "suggested_phrases": SAM_PHRASES}
+
+
+# --- Day 3: manual binding, tap-to-control, baseline reset ---
+
+# Demo-virtual mapping: tapping the door region simulates the sensor by
+# flipping its input_boolean. Physical rollout swaps entity IDs; same API.
+VIRTUAL_TAP_INPUTS = {
+    "binary_sensor.patio_door": "input_boolean.patio_door_open",
+}
+BASELINE_INPUTS = [
+    "input_boolean.lamp_floor_on",
+    "input_boolean.string_lights_on",
+    "input_boolean.reading_light_on",
+    "input_boolean.patio_door_open",
+]
+BASELINE_LIGHTS = ["light.floor_lamp", "light.string_lights", "light.reading_light"]
+BINDABLE_DOMAINS = ("light", "binary_sensor")
+
+
+async def _ha_states() -> list[dict]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(f"{HA_URL}/api/states", headers=_headers())
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"HA query failed: {resp.status_code}")
+    return resp.json()
+
+
+async def _ha_service(service: str, payload: dict) -> None:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(f"{HA_URL}/api/services/{service}",
+                                 headers=_headers(), json=payload)
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"HA {service} failed: {resp.status_code}")
+
+
+def _region_or_404(photo_id: int, object_id: str) -> dict:
+    graph = scene_graph(photo_id)
+    if not graph:
+        raise HTTPException(status_code=404, detail="unknown photo")
+    for r in graph["regions"]:
+        if r["object_id"] == object_id:
+            return r
+    raise HTTPException(status_code=404, detail="unknown region")
+
+
+class BindingRequest(BaseModel):
+    object_id: str
+    entity_id: str
+
+
+@app.get("/api/photos/{photo_id}/bindings")
+async def photo_bindings(photo_id: int) -> dict:
+    if not get_photo(photo_id):
+        raise HTTPException(status_code=404, detail="unknown photo")
+    return {"photo_id": photo_id, "bindings": list_bindings(photo_id)}
+
+
+@app.post("/api/photos/{photo_id}/bindings")
+async def bind_region(photo_id: int, req: BindingRequest) -> dict:
+    _region_or_404(photo_id, req.object_id)
+    domain, _, _ = req.entity_id.partition(".")
+    if domain not in BINDABLE_DOMAINS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Only {', '.join(BINDABLE_DOMAINS)}.* entities can be bound (Day 3 baseline)",
+        )
+    known = {s.get("entity_id") for s in await _ha_states()}
+    if req.entity_id not in known:
+        raise HTTPException(status_code=422, detail="unknown HA entity")
+    set_binding(photo_id, req.object_id, req.entity_id)
+    return {"ok": True, "object_id": req.object_id, "entity_id": req.entity_id}
+
+
+@app.delete("/api/photos/{photo_id}/bindings/{object_id}")
+async def unbind_region(photo_id: int, object_id: str) -> dict:
+    if not delete_binding(photo_id, object_id):
+        raise HTTPException(status_code=404, detail="no such binding")
+    return {"ok": True, "object_id": object_id}
+
+
+class TapRequest(BaseModel):
+    object_id: str
+
+
+@app.post("/api/photos/{photo_id}/tap")
+async def tap_region(photo_id: int, req: TapRequest) -> dict:
+    _region_or_404(photo_id, req.object_id)
+    entity_id = get_binding(photo_id, req.object_id)
+    if not entity_id:
+        raise HTTPException(status_code=409, detail="region is not bound yet")
+    domain, _, _ = entity_id.partition(".")
+    if domain == "light":
+        await _ha_service("light/toggle", {"entity_id": entity_id})
+        action = "toggle"
+    elif entity_id in VIRTUAL_TAP_INPUTS:
+        await _ha_service("input_boolean/toggle",
+                          {"entity_id": VIRTUAL_TAP_INPUTS[entity_id]})
+        action = "simulate"
+    else:
+        raise HTTPException(status_code=422, detail="no tap action for this entity")
+    return {"ok": True, "object_id": req.object_id, "entity_id": entity_id, "action": action}
+
+
+MATCH_SYSTEM = (
+    "You match photo regions to smart-home entities for binding. "
+    "Reply with JSON only, following the schema. Rules: "
+    "light-like regions bind only to light.* entities; "
+    "door-like regions bind only to binary_sensor.* door entities; "
+    "screens and displays (tv, monitor, smart display) bind to NOTHING; "
+    "decor binds to nothing; "
+    "propose ONLY regions marked UNBOUND, and only entities marked free; "
+    "use box positions (thirds of the photo) plus the already-bound regions "
+    "as landmarks to tell same-label fixtures apart; "
+    "when unsure, leave the region unmapped rather than guessing."
+)
+
+
+def _third(v: float) -> str:
+    return "left" if v < 0.33 else ("right" if v > 0.66 else "center")
+
+
+# Fixed description of the demo room (mirrors assets/demo-room/README.md).
+# Gives the matcher the same layout facts a human binder would use.
+ROOM_NOTES = (
+    "Room layout: sofa against the left wall; tall floor lamp in the "
+    "back-left corner; TV centered on the back wall; string lights across "
+    "the top; window with blind plus patio door on the right wall; a "
+    "reading nook (pouf + side table + reading lamp) by the window; "
+    "coffee table with smart display in the center."
+)
+MATCH_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "matches": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "object_id": {"type": "string"},
+                    "entity_id": {"type": "string"},
+                    "reason": {"type": "string"},
+                    "confidence": {"type": "number"},
+                },
+                "required": ["object_id", "entity_id", "reason", "confidence"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["matches"],
+    "additionalProperties": False,
+}
+
+
+def _spark_log(photo_id: int, latency_ms: int, n: int, status: str,
+                 raw: list | None = None) -> None:
+    import json
+    import time
+    from spark_client import SPARK_MODEL
+    with open(DATA_DIR / "spark_calls.jsonl", "a") as f:
+        f.write(json.dumps({"ts": time.time(), "model": SPARK_MODEL,
+                            "photo_id": photo_id, "latency_ms": latency_ms,
+                            "n_proposals": n, "status": status,
+                            "raw_matches": raw or []}) + "\n")
+
+
+@app.post("/api/photos/{photo_id}/suggest-bindings")
+async def suggest_bindings(photo_id: int) -> dict:
+    """Model-proposed bindings for unbound regions. Proposals only — the UI
+    applies them through the normal binding endpoint after user approval."""
+    import time
+    from spark_client import SPARK_MODEL, SparkError, complete_json
+
+    graph = scene_graph(photo_id)
+    if not graph:
+        raise HTTPException(status_code=404, detail="unknown photo")
+    bound = graph["bindings"]
+    if not any(r["object_id"] not in bound for r in graph["regions"]):
+        return {"photo_id": photo_id, "proposals": [],
+                "note": "everything already bound"}
+    states = await _ha_states()
+    entity_bound = {e: o for o, e in bound.items()}
+    entities = [
+        {"entity_id": s.get("entity_id"),
+         "name": (s.get("attributes") or {}).get("friendly_name", s.get("entity_id")),
+         "state": s.get("state")}
+        for s in states
+        if s.get("entity_id", "").split(".")[0] in BINDABLE_DOMAINS
+    ]
+
+    def _describe_region(r: dict) -> str:
+        pos = f"{_third(r['x'] + r['w'] / 2)}-{_third(r['y'] + r['h'] / 2)}"
+        status = f"bound to {bound[r['object_id']]}" \
+            if r["object_id"] in bound else "UNBOUND"
+        return (f"- {r['object_id']}: {r['phrase']} [{r['source']}] "
+                f"at {pos} box=({r['x']:.2f},{r['y']:.2f},{r['w']:.2f},{r['h']:.2f}) "
+                f"{status}")
+
+    def _describe_entity(e: dict) -> str:
+        status = f"bound to {entity_bound[e['entity_id']]}" \
+            if e["entity_id"] in entity_bound else "free"
+        return f"- {e['entity_id']}: {e['name']} ({e['state']}) {status}"
+
+    user = (ROOM_NOTES + "\nPhoto regions:\n" +
+            "\n".join(_describe_region(r) for r in graph["regions"]) +
+            "\nHome Assistant entities:\n" +
+            "\n".join(_describe_entity(e) for e in entities) +
+            "\nPropose entity matches for the UNBOUND regions only.")
+    regions = [r for r in graph["regions"] if r["object_id"] not in bound]
+    t0 = time.monotonic()
+    try:
+        out = await complete_json(MATCH_SYSTEM, user, MATCH_SCHEMA)
+    except SparkError as e:
+        _spark_log(photo_id, int((time.monotonic() - t0) * 1000), 0, f"error: {e}")
+        raise HTTPException(status_code=502, detail=f"Spark failed: {e}")
+    latency_ms = int((time.monotonic() - t0) * 1000)
+    _spark_log(photo_id, latency_ms, 0, "raw",
+               [{"object_id": m.get("object_id"), "entity_id": m.get("entity_id")}
+                for m in out.get("matches", [])])
+    known_regions = {r["object_id"] for r in regions}
+    known_entities = {e["entity_id"] for e in entities}
+    proposals = []
+    used_entities: set[str] = set()
+    for m in out.get("matches", []):
+        oid, eid = m.get("object_id"), m.get("entity_id")
+        if oid not in known_regions or eid not in known_entities:
+            continue  # hallucinated ids never ship
+        conflict = eid in used_entities
+        used_entities.add(eid)
+        proposals.append({"object_id": oid, "entity_id": eid,
+                          "reason": m.get("reason", ""),
+                          "confidence": m.get("confidence", 0),
+                          "conflict": conflict})
+    _spark_log(photo_id, latency_ms, len(proposals), "ok")
+    return {"photo_id": photo_id, "proposals": proposals, "latency_ms": latency_ms}
+
+
+@app.post("/api/reset")
+async def reset_baseline() -> dict:
+    """One-click return to the frozen baseline: every demo input off, every light off."""
+    for entity_id in BASELINE_INPUTS:
+        await _ha_service("input_boolean/turn_off", {"entity_id": entity_id})
+    for entity_id in BASELINE_LIGHTS:
+        await _ha_service("light/turn_off", {"entity_id": entity_id})
+    return {"ok": True, "inputs_off": BASELINE_INPUTS, "lights_off": BASELINE_LIGHTS}
 
 
 @app.delete("/api/photos/{photo_id}/regions/{object_id}")

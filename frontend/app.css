@@ -75,6 +75,14 @@ body {
 .region.manual { border-style: dashed; border-color: var(--manual); background: rgba(240, 168, 50, 0.10); }
 .region:hover { background: rgba(52, 211, 153, 0.22); }
 .region.selected { box-shadow: 0 0 0 2px var(--bg), 0 0 14px var(--sam); }
+.region.bound { border-width: 3px; }
+#selected-info { font-size: 0.9rem; margin-bottom: 0.5rem; min-height: 1.4em; }
+#bind-row, #tap-row { display: flex; gap: 0.4rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
+#entity-select {
+  flex: 1; min-width: 8rem; font: inherit; font-size: 0.8rem;
+  padding: 0.4rem; border-radius: 6px;
+  border: 1px solid #3a4653; background: #0d1114; color: var(--text);
+}
 .region .tag {
   position: absolute; top: -1.5em; left: -2px;
   font-size: 0.72rem; font-weight: 600; white-space: nowrap;
@@ -109,6 +117,13 @@ body.drawing #photo-wrap { cursor: crosshair; }
 }
 .devices .dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; background: #5a636d; }
 .devices .dot.on { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+.proposals { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 0.4rem; }
+.proposals li {
+  font-size: 0.8rem; padding: 0.5rem 0.6rem;
+  background: var(--panel); border: 1px solid #2a343e; border-radius: 8px;
+  display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;
+}
+#suggest-btn { margin-bottom: 0.2rem; }
 @media (max-width: 60rem) {
   .layout { grid-template-columns: 1fr; }
 }

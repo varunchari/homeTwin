@@ -17,5 +17,7 @@ Stage 1 is pass/fail on real Meta model usage. A mock scores zero on Meta Toolin
 | 2 | sam-3.1 | `lamp` / `string lights` / `tv` / `display` on photo 7 | 1.3–2.8 s | 2 + 1 + 1 + 1 (TV dupe pruned) | display = smart display at coffee table | ~$0.01 |
 | 2 | sam-3.1 | `patio door` on photo 7 | 2032 ms | 0 regions (miss) | manual fallback region added (P0-critical, works normally) | ~$0.0025 |
 | 2 | sam-3.1 | `smart display` on photo 7 (fallback live check) | — | matched as `display`, 2 regions (verification dupes pruned after) | phrase-fallback retry works end to end | ~$0.005 |
+| 3 | muse-spark-1.3 | binding-match on photo 7 (lamp unbound) | ~10.8 s | 1 proposal: lamp → light.reading_light (0.9, spatial reasoning) | landmark prompt fixed an earlier floor_lamp misguess | judging-evidence pending |
+| 3 | muse-spark-1.3 | binding-match rows in `spark_calls.jsonl` (host) | — | model, latency, proposals, raw ids per call | same provenance rule as SAM log | — |
 
 Baseten A/B rows (Oct 30 only): record model string as shown in the Baseten dashboard, provider, valid-rate, latency per provider.

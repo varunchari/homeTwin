@@ -39,6 +39,13 @@ CREATE TABLE IF NOT EXISTS regions (
   created REAL NOT NULL,
   UNIQUE(photo_id, object_id)
 );
+CREATE TABLE IF NOT EXISTS bindings (
+  photo_id INTEGER NOT NULL REFERENCES photos(id),
+  object_id TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  created REAL NOT NULL,
+  PRIMARY KEY (photo_id, object_id)
+);
 """
 
 
@@ -46,6 +53,19 @@ def connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    try:
+        conn.execute("ALTER TABLE photos ADD COLUMN sha TEXT")
+    except sqlite3.OperationalError:
+        pass  # column already exists
+    conn.commit()
+    # Backfill sha for photos stored before the column existed.
+    import hashlib
+    for row in conn.execute("SELECT id FROM photos WHERE sha IS NULL").fetchall():
+        path = PHOTOS_DIR / f"{row['id']}.jpg"
+        if path.is_file():
+            conn.execute("UPDATE photos SET sha=? WHERE id=?",
+                         (hashlib.sha256(path.read_bytes()).hexdigest(), row["id"]))
+    conn.commit()
     return conn
 
 
@@ -71,6 +91,25 @@ def add_photo(filename: str, width: int, height: int) -> int:
         )
         conn.commit()
         return cur.lastrowid
+    finally:
+        conn.close()
+
+
+def find_photo_by_sha(sha: str) -> dict | None:
+    conn = connect()
+    try:
+        row = conn.execute("SELECT * FROM photos WHERE sha=? ORDER BY id DESC LIMIT 1",
+                           (sha,)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def set_photo_sha(photo_id: int, sha: str) -> None:
+    conn = connect()
+    try:
+        conn.execute("UPDATE photos SET sha=? WHERE id=?", (sha, photo_id))
+        conn.commit()
     finally:
         conn.close()
 
@@ -106,6 +145,75 @@ def add_region(photo_id: int, source: str, phrase: str,
         conn.close()
 
 
+def get_binding(photo_id: int, object_id: str) -> str | None:
+    conn = connect()
+    try:
+        row = conn.execute(
+            "SELECT entity_id FROM bindings WHERE photo_id=? AND object_id=?",
+            (photo_id, object_id)).fetchone()
+        return row["entity_id"] if row else None
+    finally:
+        conn.close()
+
+
+def set_binding(photo_id: int, object_id: str, entity_id: str) -> None:
+    import time
+    conn = connect()
+    try:
+        conn.execute(
+            "INSERT INTO bindings (photo_id, object_id, entity_id, created)"
+            " VALUES (?,?,?,?) ON CONFLICT(photo_id, object_id)"
+            " DO UPDATE SET entity_id=excluded.entity_id",
+            (photo_id, object_id, entity_id, time.time()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def delete_phrase_regions(photo_id: int, phrase: str) -> list[str]:
+    """Delete SAM regions for one phrase (segment refresh). Returns removed
+    object_ids so callers can drop orphaned bindings."""
+    conn = connect()
+    try:
+        rows = conn.execute(
+            "SELECT object_id, mask_path FROM regions"
+            " WHERE photo_id=? AND phrase=? AND source='sam'",
+            (photo_id, phrase)).fetchall()
+        removed = [r["object_id"] for r in rows]
+        conn.execute(
+            "DELETE FROM regions WHERE photo_id=? AND phrase=? AND source='sam'",
+            (photo_id, phrase))
+        conn.commit()
+    finally:
+        conn.close()
+    for r in rows:
+        if r["mask_path"]:
+            Path(r["mask_path"]).unlink(missing_ok=True)
+    return removed
+
+
+def delete_binding(photo_id: int, object_id: str) -> bool:
+    conn = connect()
+    try:
+        cur = conn.execute(
+            "DELETE FROM bindings WHERE photo_id=? AND object_id=?",
+            (photo_id, object_id))
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def list_bindings(photo_id: int) -> dict[str, str]:
+    conn = connect()
+    try:
+        return {r["object_id"]: r["entity_id"] for r in conn.execute(
+            "SELECT object_id, entity_id FROM bindings WHERE photo_id=?", (photo_id,))}
+    finally:
+        conn.close()
+
+
 def scene_graph(photo_id: int) -> dict | None:
     conn = connect()
     try:
@@ -118,6 +226,9 @@ def scene_graph(photo_id: int) -> dict | None:
             " FROM regions WHERE photo_id=? ORDER BY object_id",
             (photo_id,),
         ).fetchall()
-        return {"photo": dict(photo), "regions": [dict(r) for r in regions]}
+        bindings = {r["object_id"]: r["entity_id"] for r in conn.execute(
+            "SELECT object_id, entity_id FROM bindings WHERE photo_id=?", (photo_id,))}
+        return {"photo": dict(photo), "regions": [dict(r) for r in regions],
+                "bindings": bindings}
     finally:
         conn.close()

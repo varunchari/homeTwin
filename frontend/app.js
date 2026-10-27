@@ -24,6 +24,7 @@ async function load() {
   const entities = await res.json();
   for (const e of entities) states.set(e.entity_id, e.state);
   render();
+  await refreshEntities();
 }
 
 function connect() {
@@ -43,7 +44,6 @@ function connect() {
 // Day 2: room photo, SAM regions, manual fallback. Overlays are drawn
 // deterministically from the scene graph; reload shows the same graph.
 const photoInput = document.getElementById("photo-input");
-const uploadBtn = document.getElementById("upload-btn");
 const photoEl = document.getElementById("photo");
 const regionsEl = document.getElementById("regions");
 const phraseInput = document.getElementById("phrase-input");
@@ -70,6 +70,9 @@ for (const p of SUGGESTED) {
 
 function say(msg) { photoMsg.textContent = msg; }
 
+let bindings = {};
+let selectedId = null;
+
 function renderRegions(regions) {
   regionsEl.innerHTML = "";
   regionList.innerHTML = "";
@@ -85,12 +88,12 @@ function renderRegions(regions) {
     tag.className = "tag";
     tag.textContent = r.object_id;
     box.appendChild(tag);
-    box.addEventListener("click", (ev) => {
+    if (bindings[r.object_id]) box.classList.add("bound");
+    box.addEventListener("click", async (ev) => {
       if (drawing) return;
       ev.stopPropagation();
-      for (const el of regionsEl.children) el.classList.remove("selected");
-      box.classList.add("selected");
-      say(`Selected ${r.object_id} — binding arrives Day 3.`);
+      selectRegion(r.object_id);
+      if (bindings[r.object_id]) await tapSelected();
     });
     regionsEl.appendChild(box);
     const li = document.createElement("li");
@@ -105,14 +108,130 @@ async function refreshGraph() {
   if (!photoId) return;
   const res = await fetch(`/api/photos/${photoId}/graph`);
   const graph = await res.json();
+  bindings = graph.bindings || {};
   renderRegions(graph.regions);
+  if (selectedId) showSelected(selectedId);
 }
 
-uploadBtn.addEventListener("click", async () => {
+function selectRegion(objectId) {
+  selectedId = objectId;
+  for (const el of regionsEl.children) {
+    el.classList.toggle("selected", el.title.startsWith(objectId + " "));
+  }
+  showSelected(objectId);
+}
+
+function showSelected(objectId) {
+  const info = document.getElementById("selected-info");
+  const bound = bindings[objectId];
+  info.textContent = bound ? `${objectId} → ${bound}` : `${objectId} (unbound)`;
+}
+
+async function tapSelected() {
+  if (!photoId || !selectedId) return;
+  const res = await fetch(`/api/photos/${photoId}/tap`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ object_id: selectedId }),
+  });
+  const body = await res.json();
+  say(res.ok ? `Tapped ${selectedId} (${body.action}). Watch the Devices panel.` : `Tap failed: ${body.detail || res.status}`);
+}
+
+const entitySelect = document.getElementById("entity-select");
+async function refreshEntities() {
+  const res = await fetch("/api/entities");
+  const entities = await res.json();
+  entitySelect.innerHTML = "";
+  for (const e of entities) {
+    const domain = e.entity_id.split(".")[0];
+    if (domain !== "light" && domain !== "binary_sensor") continue;
+    const opt = document.createElement("option");
+    opt.value = e.entity_id;
+    opt.textContent = `${e.entity_id} (${e.state})`;
+    entitySelect.appendChild(opt);
+  }
+}
+
+document.getElementById("bind-btn").addEventListener("click", async () => {
+  if (!photoId || !selectedId) { say("Select a region first."); return; }
+  const res = await fetch(`/api/photos/${photoId}/bindings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ object_id: selectedId, entity_id: entitySelect.value }),
+  });
+  const body = await res.json();
+  say(res.ok ? `Bound ${selectedId} → ${entitySelect.value}.` : `Bind failed: ${body.detail || res.status}`);
+  await refreshGraph();
+});
+
+document.getElementById("unbind-btn").addEventListener("click", async () => {
+  if (!photoId || !selectedId) return;
+  await fetch(`/api/photos/${photoId}/bindings/${selectedId}`, { method: "DELETE" });
+  say(`Unbound ${selectedId}.`);
+  await refreshGraph();
+});
+
+document.getElementById("tap-btn").addEventListener("click", tapSelected);
+
+const proposalList = document.getElementById("proposal-list");
+async function applyProposal(p) {
+  const res = await fetch(`/api/photos/${photoId}/bindings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ object_id: p.object_id, entity_id: p.entity_id }),
+  });
+  return res.ok;
+}
+document.getElementById("suggest-btn").addEventListener("click", async () => {
+  if (!photoId) { say("Upload a photo first."); return; }
+  say("Asking Spark for binding suggestions…");
+  const res = await fetch(`/api/photos/${photoId}/suggest-bindings`, { method: "POST" });
+  const body = await res.json();
+  if (!res.ok) { say(`Suggest failed: ${body.detail || res.status}`); return; }
+  proposalList.innerHTML = "";
+  if (!body.proposals.length) {
+    say(body.note || "No suggestions — everything is bound or nothing matched.");
+    return;
+  }
+  say(`${body.proposals.length} suggestion(s). Approve each, or all at once.`);
+  for (const p of body.proposals) {
+    const li = document.createElement("li");
+    li.textContent = `${p.object_id} → ${p.entity_id} (${Math.round(p.confidence * 100)}%): ${p.reason}${p.conflict ? " [CONFLICT]" : ""}`;
+    const btn = document.createElement("button");
+    btn.className = "btn";
+    btn.textContent = "Approve";
+    btn.addEventListener("click", async () => {
+      say(await applyProposal(p) ? `Bound ${p.object_id}.` : `Bind failed for ${p.object_id}.`);
+      await refreshGraph();
+    });
+    li.appendChild(btn);
+    proposalList.appendChild(li);
+  }
+  const all = document.createElement("button");
+  all.className = "btn primary";
+  all.textContent = "Approve all";
+  all.addEventListener("click", async () => {
+    for (const p of body.proposals) {
+      if (p.conflict) continue;
+      await applyProposal(p);
+    }
+    say("Approved all non-conflicting suggestions.");
+    await refreshGraph();
+  });
+  proposalList.appendChild(all);
+});
+document.getElementById("reset-btn").addEventListener("click", async () => {
+  const res = await fetch("/api/reset", { method: "POST" });
+  say(res.ok ? "Baseline restored: everything off." : "Reset failed.");
+});
+
+photoInput.addEventListener("change", async () => {
   const file = photoInput.files[0];
-  if (!file) { say("Choose a JPEG or PNG first."); return; }
+  if (!file) return;
   const form = new FormData();
   form.append("file", file);
+  say("Uploading and auto-segmenting…");
   const res = await fetch("/api/photos", { method: "POST", body: form });
   if (!res.ok) { say(`Upload failed: ${res.status}`); return; }
   const body = await res.json();
@@ -120,7 +239,14 @@ uploadBtn.addEventListener("click", async () => {
   photoEl.src = `/api/photos/${photoId}/image`;
   photoEl.hidden = false;
   document.getElementById("photo-empty").classList.add("gone");
-  say(`Photo ${photoId} uploaded (${body.width}x${body.height}). Segment a phrase or draw a region.`);
+  if (body.reused) {
+    say(`Photo ${photoId} already known — loaded its regions directly.`);
+  } else {
+    const hits = (body.auto_segment || []).filter((a) => a.regions.length > 0);
+    const missed = (body.auto_segment || []).filter((a) => a.regions.length === 0);
+    say(`Photo ${photoId} segmented: ${hits.length} phrase(s) hit` +
+      (missed.length ? `, missed: ${missed.map((a) => a.phrase).join(", ")} — draw those manually.` : "."));
+  }
   await refreshGraph();
 });
 

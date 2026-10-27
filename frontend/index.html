@@ -22,7 +22,6 @@
         <label class="file-btn">Upload photo
           <input type="file" id="photo-input" accept="image/jpeg,image/png" hidden />
         </label>
-        <button id="upload-btn" class="btn">Use photo</button>
         <input id="phrase-input" placeholder="Concept phrase — e.g. lamp" />
         <button id="segment-btn" class="btn primary">Segment</button>
         <button id="draw-btn" class="btn">Draw region</button>
@@ -37,6 +36,24 @@
     </section>
 
     <aside class="panel">
+      <section>
+        <h2>Selected</h2>
+        <div id="selected-info">Tap a region in the photo.</div>
+        <div id="bind-row">
+          <select id="entity-select"></select>
+          <button id="bind-btn" class="btn">Bind</button>
+          <button id="unbind-btn" class="btn">Unbind</button>
+        </div>
+        <div id="tap-row">
+          <button id="tap-btn" class="btn primary">Tap to control</button>
+          <button id="reset-btn" class="btn">Reset baseline</button>
+        </div>
+      </section>
+      <section>
+        <h2>Auto-bind</h2>
+        <button id="suggest-btn" class="btn primary">Suggest bindings</button>
+        <ul id="proposal-list" class="proposals"></ul>
+      </section>
       <section>
         <h2>Regions</h2>
         <ul id="region-list" class="chips"></ul>
