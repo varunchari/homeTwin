@@ -95,6 +95,16 @@ body.drawing #photo-wrap { cursor: crosshair; }
 #photo-msg { min-height: 1.5em; color: var(--muted); font-size: 0.88rem; margin: 0.7rem 0 0; }
 .panel section { margin-bottom: 1.5rem; }
 .panel h2 { font-size: 0.95rem; margin: 0 0 0.6rem; }
+/* Collapsible detail panels (Devices, Automate): photo-first UI, details on demand. */
+.panel details.fold { margin-bottom: 1.5rem; }
+.panel details.fold > summary {
+  font-size: 0.95rem; font-weight: 600; cursor: pointer; list-style: none;
+  display: flex; align-items: baseline; gap: 0.5rem; margin: 0 0 0.6rem;
+}
+.panel details.fold > summary::-webkit-details-marker { display: none; }
+.panel details.fold > summary::before { content: "▸"; opacity: 0.6; }
+.panel details.fold[open] > summary::before { content: "▾"; }
+.fold-hint { font-size: 0.75rem; font-weight: 400; opacity: 0.55; }
 .chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .chips li {
   font-size: 0.78rem; padding: 0.25rem 0.6rem; border-radius: 999px;

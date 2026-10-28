@@ -54,8 +54,8 @@
         <button id="suggest-btn" class="btn primary">Suggest bindings</button>
         <ul id="proposal-list" class="proposals"></ul>
       </section>
-      <section>
-        <h2>Automate</h2>
+      <details class="fold">
+        <summary>Automate <span class="fold-hint">plan details</span></summary>
         <div id="auto-row">
           <select id="source-select" title="Trigger region"></select>
           <span class="arrow">→</span>
@@ -64,7 +64,7 @@
         <input id="auto-text" placeholder="Instruction — e.g. after sunset, off after a minute" />
         <button id="plan-btn" class="btn primary">Generate plan</button>
         <div id="plan-view"></div>
-      </section>
+      </details>
       <section>
         <h2>What-If <span class="sim-tag">simulated</span></h2>
         <div id="whatif-row">
@@ -85,10 +85,10 @@
         <h2>Regions</h2>
         <ul id="region-list" class="chips"></ul>
       </section>
-      <section>
-        <h2>Devices</h2>
+      <details class="fold">
+        <summary>Devices <span class="fold-hint">entity list</span></summary>
         <ul id="entities" class="devices"></ul>
-      </section>
+      </details>
     </aside>
   </main>
 
