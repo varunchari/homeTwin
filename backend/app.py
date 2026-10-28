@@ -690,6 +690,9 @@ async def approve_automation(proposal_id: int) -> dict:
         if put.status_code not in (200, 201):
             raise HTTPException(status_code=502,
                                 detail=f"HA deploy failed: {put.status_code}")
+        # Writing via the config API only stores the automation; the engine
+        # picks it up on reload. Without this the deployed rule never fires.
+        await _ha_service("automation/reload", {})
         read = await client.get(
             f"{HA_URL}/api/config/automation/config/{automation_id}",
             headers=_headers())
@@ -698,6 +701,58 @@ async def approve_automation(proposal_id: int) -> dict:
     store_module.set_proposal_status(proposal_id, "deployed")
     return {"ok": True, "proposal_id": proposal_id,
             "automation_id": automation_id, "read_back": read.json()}
+
+
+# --- Day 5: What-If preview (simulated inputs, clearly labelled) ---
+
+class WhatIfRequest(BaseModel):
+    proposal_id: int
+    door: str = "on"   # simulated door event: "on" (opened) or "off"
+    sun: str = "day"   # simulated sun: "day" or "night"
+
+
+@app.get("/api/automations/proposals")
+async def proposals_list() -> dict:
+    import store as store_module
+    return {"proposals": store_module.list_proposals()}
+
+
+@app.post("/api/whatif")
+async def what_if(req: WhatIfRequest) -> dict:
+    """Simulated preview reusing the compiled automation. NOT an HA emulator:
+    answers 'would this automation fire if the door opened under this sun?'
+    using the same compiled trigger/condition the deploy path uses."""
+    from automation import validate_ir
+    import store as store_module
+
+    if req.door not in ("on", "off"):
+        raise HTTPException(status_code=422, detail="door must be 'on' or 'off'")
+    if req.sun not in ("day", "night"):
+        raise HTTPException(status_code=422, detail="sun must be 'day' or 'night'")
+    proposal = store_module.get_proposal(req.proposal_id)
+    if not proposal:
+        raise HTTPException(status_code=404, detail="unknown proposal")
+    registry = {s.get("entity_id") for s in await _ha_states()}
+    reasons = validate_ir(proposal["ir"], registry)
+    if reasons:
+        raise HTTPException(status_code=422, detail="; ".join(reasons))
+    compiled = proposal["compiled"]
+    trigger_match = req.door == "on"
+    cond = next((c for c in compiled.get("condition", [])
+                 if c.get("condition") == "sun"), None)
+    if cond is None:
+        condition_pass, condition_note = True, "no condition"
+    elif "after" in cond or "before" in cond:
+        condition_pass = req.sun == "night"
+        condition_note = f"sun {cond.get('after') or cond.get('before')} vs simulated {req.sun}"
+    else:
+        condition_pass, condition_note = False, "unknown condition form"
+    fires = trigger_match and condition_pass
+    return {"simulated": True, "proposal_id": req.proposal_id,
+            "inputs": {"door": req.door, "sun": req.sun},
+            "trigger_match": trigger_match, "condition_pass": condition_pass,
+            "condition_note": condition_note, "fires": fires,
+            "action": compiled["action"] if fires else []}
 
 
 @app.post("/api/reset")

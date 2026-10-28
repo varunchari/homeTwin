@@ -250,6 +250,25 @@ def get_proposal(proposal_id: int) -> dict | None:
         conn.close()
 
 
+def list_proposals() -> list[dict]:
+    import json
+    conn = connect()
+    try:
+        rows = conn.execute(
+            "SELECT id, photo_id, source_id, target_id, text, ir, status, created"
+            " FROM proposals ORDER BY id").fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            ir = json.loads(d.pop("ir"))
+            d["summary"] = (f"{ir['trigger']['entity_id']} to "
+                            f"{ir['action']['entity_id']}")
+            out.append(d)
+        return out
+    finally:
+        conn.close()
+
+
 def set_proposal_status(proposal_id: int, status: str) -> None:
     conn = connect()
     try:

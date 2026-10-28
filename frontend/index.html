@@ -66,6 +66,22 @@
         <div id="plan-view"></div>
       </section>
       <section>
+        <h2>What-If <span class="sim-tag">simulated</span></h2>
+        <div id="whatif-row">
+          <select id="whatif-proposal" title="Automation proposal"></select>
+          <select id="whatif-door" title="Simulated door event">
+            <option value="on">door opens</option>
+            <option value="off">door stays shut</option>
+          </select>
+          <select id="whatif-sun" title="Simulated sun">
+            <option value="day">daytime</option>
+            <option value="night">simulated night</option>
+          </select>
+        </div>
+        <button id="whatif-btn" class="btn">Preview</button>
+        <div id="whatif-view"></div>
+      </section>
+      <section>
         <h2>Regions</h2>
         <ul id="region-list" class="chips"></ul>
       </section>

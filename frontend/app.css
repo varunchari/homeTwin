@@ -133,6 +133,17 @@ body.drawing #photo-wrap { cursor: crosshair; }
 .plan.rejected { border-color: var(--danger); }
 .plan .muted { color: var(--muted); font-size: 0.78rem; }
 .plan .btn { margin-top: 0.5rem; }
+.sim-tag {
+  font-size: 0.68rem; font-weight: 700; vertical-align: middle;
+  padding: 0.15em 0.5em; border-radius: 999px;
+  border: 1px dashed var(--manual); color: var(--manual);
+}
+#whatif-row { display: flex; gap: 0.4rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
+#whatif-row select {
+  flex: 1; min-width: 6rem; font: inherit; font-size: 0.8rem; padding: 0.4rem;
+  border-radius: 6px; border: 1px solid #3a4653; background: #0d1114; color: var(--text);
+}
+#whatif-view { margin-top: 0.5rem; }
 @media (max-width: 60rem) {
   .layout { grid-template-columns: 1fr; }
 }

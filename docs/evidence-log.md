@@ -27,3 +27,9 @@ Stage 1 is pass/fail on real Meta model usage. A mock scores zero on Meta Toolin
 | 4 | both providers | A/B round 2 after explicit-null normalization | 3.8–5.0 s | 4/4 valid each; same prompt/schema/validator | DECISION FINAL: comparable, bonus claimed | — |
 
 Baseten A/B rows (Oct 30 only): record model string as shown in the Baseten dashboard, provider, valid-rate, latency per provider.
+| 5 | muse-spark-1.3 | live deploy #14: door → reading light, no text | 4262 ms | approved hometwin_14, HA read-back trigger binary_sensor.patio_door → on | first live HA write; deploy now calls automation/reload | judging-evidence pending |
+| 5 | — | 3x end-to-end loop (tap patio-door → light) | — | 3/3 door=on light=on, 2 WS state_changed events each | single live rule after cleanup; reset clean each round | — |
+| 5 | muse-spark-1.3 | live deploy #15 (pending): "only after sunset" variant | ~4 s | IR carries sun-after-sunset condition, not approved (no HA write) | What-If target | judging-evidence pending |
+| 5 | — | What-If #15 day vs night (simulated, labelled) | — | day: fires False (trigger True, condition False); night: fires True | simulator, not an HA emulator | $0.00 extra |
+| 5 | — | HA location fix: lat/long Portland + explicit `sun:` | — | sun.sun=below_horizon live (correct for 18:xx PDT); minimal config kept, no default_config | `sun` only loads via default_config otherwise | — |
+| 5 | — | HA engine fix: `automation: !include automations.yaml` + approve-time automation/reload | — | engine saw zero rules before (config API wrote YAML nobody loaded); 7 dup rules cleared, 1 live rule | deploy path was store-only until this | — |

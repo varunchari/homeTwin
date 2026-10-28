@@ -191,7 +191,49 @@ document.getElementById("plan-btn").addEventListener("click", async () => {
   div.appendChild(btn);
   planView.appendChild(div);
   say("Plan ready — review and approve to deploy.");
+  await refreshProposals();
 });
+
+const whatifProposal = document.getElementById("whatif-proposal");
+const whatifDoor = document.getElementById("whatif-door");
+const whatifSun = document.getElementById("whatif-sun");
+const whatifView = document.getElementById("whatif-view");
+async function refreshProposals() {
+  const res = await fetch("/api/automations/proposals");
+  const body = await res.json();
+  const keep = whatifProposal.value;
+  whatifProposal.innerHTML = "";
+  for (const p of body.proposals) {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = `#${p.id} ${p.summary} [${p.status}]`;
+    whatifProposal.appendChild(opt);
+  }
+  if ([...whatifProposal.options].some((o) => o.value === keep)) whatifProposal.value = keep;
+}
+document.getElementById("whatif-btn").addEventListener("click", async () => {
+  if (!whatifProposal.value) { say("Generate a plan first."); return; }
+  const res = await fetch("/api/whatif", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      proposal_id: Number(whatifProposal.value),
+      door: whatifDoor.value,
+      sun: whatifSun.value,
+    }),
+  });
+  const body = await res.json();
+  whatifView.innerHTML = "";
+  const div = document.createElement("div");
+  div.className = "plan" + (body.fires ? "" : " rejected");
+  div.textContent = res.ok
+    ? (body.fires
+      ? `SIMULATED: fires — ${body.condition_note}.`
+      : `SIMULATED: no fire — ${body.condition_note}.`)
+    : `What-If failed: ${body.detail || res.status}`;
+  whatifView.appendChild(div);
+});
+refreshProposals();
 
 async function tapSelected() {
   if (!photoId || !selectedId) return;

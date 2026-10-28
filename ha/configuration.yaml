@@ -5,9 +5,21 @@ homeassistant:
   name: HomeTwin Demo
   unit_system: metric
   time_zone: UTC
+  # Demo location drives sun times for the after-sunset condition.
+  latitude: 45.5152
+  longitude: -122.6784
+  elevation: 50
 
 recorder:
   purge_keep_days: 2
+
+# Explicit sun for the after-sunset condition (Day 5).
+# Kept explicit instead of default_config to preserve the minimal Day 1 surface.
+sun:
+
+# Loads the rules the approval-gated deploy path writes via the config API.
+# Without this include the engine never sees deployed automations (Day 5 fix).
+automation: !include automations.yaml
 
 # Baseline inputs (frozen baseline for one-click reset on Day 3)
 input_boolean:

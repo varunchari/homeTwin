@@ -100,6 +100,9 @@ class FakeResp:
         return self._payload
 
 
+SERVICE_CALLS = []
+
+
 class FakeAsyncClient:
     def __init__(self, *a, **k):
         pass
@@ -120,6 +123,7 @@ class FakeAsyncClient:
 
     async def post(self, url, headers=None, json=None):
         if "/api/services/" in url:
+            SERVICE_CALLS.append(url.rsplit("/api/services/", 1)[-1])
             return FakeResp(200, [])
         aid = url.rsplit("/", 1)[-1]
         DEPLOYED[aid] = json or {}
@@ -233,12 +237,97 @@ class ProposeApproveTest(unittest.TestCase):
         self.assertTrue(body["ok"])
         self.assertTrue(body["automation_id"].startswith("hometwin_"))
         self.assertIn("trigger", body["read_back"])
+        self.assertIn("automation/reload", SERVICE_CALLS)
+        SERVICE_CALLS.clear()
         again = self.client.post(
             f"/api/automations/{prop['proposal_id']}/approve").json()
         self.assertTrue(again.get("already"))
 
     def test_approve_unknown_is_404(self):
         r = self.client.post("/api/automations/999999/approve")
+        self.assertEqual(r.status_code, 404)
+
+
+class WhatIfTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from starlette.testclient import TestClient
+
+        cls.client = TestClient(proxy.app)
+
+    def setUp(self):
+        self._saved_client = proxy.httpx.AsyncClient
+        self._saved_token = proxy.HA_TOKEN
+        self._saved_complete = spark_client.complete_json
+        proxy.httpx.AsyncClient = FakeAsyncClient
+        proxy.HA_TOKEN = "test-token"
+        spark_client.complete_json = fake_complete
+
+    def tearDown(self):
+        proxy.httpx.AsyncClient = self._saved_client
+        proxy.HA_TOKEN = self._saved_token
+        spark_client.complete_json = self._saved_complete
+
+    def _proposal(self, w):
+        pid = make_bound_photo(self.client, w=w)
+        return self.client.post("/api/automations/propose",
+                                json={"photo_id": pid, "source_object_id": "door",
+                                      "target_object_id": "lamp", "text": ""}).json()
+
+    def test_lists_proposals_with_summaries(self):
+        prop = self._proposal(600)
+        body = self.client.get("/api/automations/proposals").json()
+        match = [p for p in body["proposals"] if p["id"] == prop["proposal_id"]]
+        self.assertEqual(len(match), 1)
+        self.assertIn("binary_sensor.patio_door", match[0]["summary"])
+
+    def test_daytime_no_condition_fires(self):
+        prop = self._proposal(616)
+        body = self.client.post("/api/whatif",
+                                json={"proposal_id": prop["proposal_id"],
+                                      "door": "on", "sun": "day"}).json()
+        self.assertTrue(body["simulated"])
+        self.assertTrue(body["fires"])
+        self.assertEqual(len(body["action"]), 1)
+
+    def test_closed_door_never_fires(self):
+        prop = self._proposal(632)
+        body = self.client.post("/api/whatif",
+                                json={"proposal_id": prop["proposal_id"],
+                                      "door": "off", "sun": "night"}).json()
+        self.assertFalse(body["fires"])
+        self.assertFalse(body["trigger_match"])
+
+    def test_sunset_gates_on_night(self):
+        async def sunset_complete(system, user, schema, model="x",
+                                  api_base=None, api_key=None):
+            ir = dict(valid_ir())
+            ir["condition"] = {"sun": "after_sunset"}
+            return ir
+
+        spark_client.complete_json = sunset_complete
+        try:
+            prop = self._proposal(664)
+        finally:
+            spark_client.complete_json = fake_complete
+        day = self.client.post("/api/whatif",
+                               json={"proposal_id": prop["proposal_id"],
+                                     "door": "on", "sun": "day"}).json()
+        night = self.client.post("/api/whatif",
+                                 json={"proposal_id": prop["proposal_id"],
+                                       "door": "on", "sun": "night"}).json()
+        self.assertFalse(day["fires"])
+        self.assertTrue(day["condition_pass"] is False)
+        self.assertTrue(night["fires"])
+
+    def test_bad_inputs_rejected(self):
+        prop = self._proposal(648)
+        r = self.client.post("/api/whatif",
+                             json={"proposal_id": prop["proposal_id"],
+                                   "door": "ajar", "sun": "day"})
+        self.assertEqual(r.status_code, 422)
+        r = self.client.post("/api/whatif",
+                             json={"proposal_id": 999999, "door": "on", "sun": "day"})
         self.assertEqual(r.status_code, 404)
 
 
