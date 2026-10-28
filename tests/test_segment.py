@@ -256,6 +256,26 @@ class ShaBackfillTest(unittest.TestCase):
             conn2.close()
 
 
+class DemoPhotoEndpointTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from starlette.testclient import TestClient
+
+        proxy.segment_image = _no_sam
+        cls.client = TestClient(proxy.app)
+
+    def test_demo_loads_through_real_pipeline_with_dedupe(self):
+        first = self.client.post("/api/photos/demo")
+        if first.status_code == 404:
+            self.skipTest("demo asset not bundled in this layout")
+        first = first.json()
+        self.assertFalse(first["reused"])
+        self.assertIn("regions", first)
+        second = self.client.post("/api/photos/demo").json()
+        self.assertTrue(second["reused"])
+        self.assertEqual(second["photo_id"], first["photo_id"])
+
+
 def tearDownModule():
     shutil.rmtree(TEST_DIR, ignore_errors=True)
 

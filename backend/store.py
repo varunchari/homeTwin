@@ -250,13 +250,19 @@ def get_proposal(proposal_id: int) -> dict | None:
         conn.close()
 
 
-def list_proposals() -> list[dict]:
+def list_proposals(photo_id: int | None = None) -> list[dict]:
     import json
     conn = connect()
     try:
-        rows = conn.execute(
-            "SELECT id, photo_id, source_id, target_id, text, ir, status, created"
-            " FROM proposals ORDER BY id").fetchall()
+        if photo_id is None:
+            rows = conn.execute(
+                "SELECT id, photo_id, source_id, target_id, text, ir, status, created"
+                " FROM proposals ORDER BY id").fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT id, photo_id, source_id, target_id, text, ir, status, created"
+                " FROM proposals WHERE photo_id=? ORDER BY id",
+                (photo_id,)).fetchall()
         out = []
         for r in rows:
             d = dict(r)

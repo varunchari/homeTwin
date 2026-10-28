@@ -247,6 +247,20 @@ class ProposeApproveTest(unittest.TestCase):
         r = self.client.post("/api/automations/999999/approve")
         self.assertEqual(r.status_code, 404)
 
+    def test_proposals_filtered_by_photo(self):
+        pid_a = make_bound_photo(self.client, w=700)
+        pid_b = make_bound_photo(self.client, w=716)
+        for pid in (pid_a, pid_b):
+            self.client.post("/api/automations/propose",
+                             json={"photo_id": pid, "source_object_id": "door",
+                                   "target_object_id": "lamp", "text": ""})
+        only_a = self.client.get(
+            f"/api/automations/proposals?photo_id={pid_a}").json()["proposals"]
+        self.assertTrue(only_a)
+        self.assertTrue(all(p["photo_id"] == pid_a for p in only_a))
+        all_props = self.client.get("/api/automations/proposals").json()["proposals"]
+        self.assertGreaterEqual(len(all_props), len(only_a) + 1)
+
 
 class WhatIfTest(unittest.TestCase):
     @classmethod

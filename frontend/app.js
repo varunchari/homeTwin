@@ -199,10 +199,13 @@ const whatifDoor = document.getElementById("whatif-door");
 const whatifSun = document.getElementById("whatif-sun");
 const whatifView = document.getElementById("whatif-view");
 async function refreshProposals() {
-  const res = await fetch("/api/automations/proposals");
-  const body = await res.json();
+  // Proposals belong to the current photo only. Before any photo is chosen
+  // the list stays empty — global history would look prepopulated.
   const keep = whatifProposal.value;
   whatifProposal.innerHTML = "";
+  if (!photoId) return;
+  const res = await fetch(`/api/automations/proposals?photo_id=${photoId}`);
+  const body = await res.json();
   for (const p of body.proposals) {
     const opt = document.createElement("option");
     opt.value = p.id;
@@ -212,6 +215,7 @@ async function refreshProposals() {
   if ([...whatifProposal.options].some((o) => o.value === keep)) whatifProposal.value = keep;
 }
 document.getElementById("whatif-btn").addEventListener("click", async () => {
+  if (!photoId) { say("Upload a photo first."); return; }
   if (!whatifProposal.value) { say("Generate a plan first."); return; }
   const res = await fetch("/api/whatif", {
     method: "POST",
@@ -233,7 +237,6 @@ document.getElementById("whatif-btn").addEventListener("click", async () => {
     : `What-If failed: ${body.detail || res.status}`;
   whatifView.appendChild(div);
 });
-refreshProposals();
 
 async function tapSelected() {
   if (!photoId || !selectedId) return;
@@ -334,6 +337,13 @@ document.getElementById("reset-btn").addEventListener("click", async () => {
   say(res.ok ? "Baseline restored: everything off." : "Reset failed.");
 });
 
+document.getElementById("demo-btn").addEventListener("click", async () => {
+  say("Loading the demo room photo…");
+  const res = await fetch("/api/photos/demo", { method: "POST" });
+  if (!res.ok) { say(`Demo photo failed: ${res.status}`); return; }
+  await usePhoto(await res.json());
+});
+
 photoInput.addEventListener("change", async () => {
   const file = photoInput.files[0];
   if (!file) return;
@@ -342,7 +352,10 @@ photoInput.addEventListener("change", async () => {
   say("Uploading and auto-segmenting…");
   const res = await fetch("/api/photos", { method: "POST", body: form });
   if (!res.ok) { say(`Upload failed: ${res.status}`); return; }
-  const body = await res.json();
+  await usePhoto(await res.json());
+});
+
+async function usePhoto(body) {
   photoId = body.photo_id;
   photoEl.src = `/api/photos/${photoId}/image`;
   photoEl.hidden = false;
@@ -356,7 +369,8 @@ photoInput.addEventListener("change", async () => {
       (missed.length ? `, missed: ${missed.map((a) => a.phrase).join(", ")} — draw those manually.` : "."));
   }
   await refreshGraph();
-});
+  await refreshProposals();
+}
 
 segmentBtn.addEventListener("click", async () => {
   if (!photoId) { say("Upload a photo first."); return; }

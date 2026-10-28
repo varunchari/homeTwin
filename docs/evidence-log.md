@@ -33,3 +33,5 @@ Baseten A/B rows (Oct 30 only): record model string as shown in the Baseten dash
 | 5 | — | What-If #15 day vs night (simulated, labelled) | — | day: fires False (trigger True, condition False); night: fires True | simulator, not an HA emulator | $0.00 extra |
 | 5 | — | HA location fix: lat/long Portland + explicit `sun:` | — | sun.sun=below_horizon live (correct for 18:xx PDT); minimal config kept, no default_config | `sun` only loads via default_config otherwise | — |
 | 5 | — | HA engine fix: `automation: !include automations.yaml` + approve-time automation/reload | — | engine saw zero rules before (config API wrote YAML nobody loaded); 7 dup rules cleared, 1 live rule | deploy path was store-only until this | — |
+| 5 | — | fresh-session fix: proposals scoped per photo; What-If empty until upload | — | global history no longer leaks across photos | kept test: filter by photo |
+| 5 | — | demo reset: automations.yaml emptied, 10 registry ghosts scrubbed, HA restarted | — | 23 entities, 0 automations, all devices off; photo 7 graph + 4 bindings intact | `/api/photos/demo` reuses photo 7, no SAM re-spend |

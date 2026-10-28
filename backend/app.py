@@ -218,12 +218,33 @@ async def upload_photo(file: UploadFile) -> dict:
 
     Same bytes re-uploaded return the existing photo (no duplicate SAM spend).
     """
-    import hashlib
-    from io import BytesIO
-    from PIL import Image
     raw = await file.read()
     if len(raw) > 15 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="photo too large (15 MB max)")
+    return await _ingest_photo(raw, file.filename or "photo")
+
+
+DEMO_PHOTO_PATH = _HERE / "assets" / "demo-room" / "dummy-room.jpg"
+if not DEMO_PHOTO_PATH.is_file():
+    DEMO_PHOTO_PATH = _HERE.parent / "assets" / "demo-room" / "dummy-room.jpg"
+
+
+@app.post("/api/photos/demo")
+async def load_demo_photo() -> dict:
+    """Load the frozen demo room photo as an explicit user action.
+
+    Same pipeline as upload (sha dedupe + auto-segment); nothing is
+    preloaded before the user asks, so a fresh visitor sees an empty canvas.
+    """
+    if not DEMO_PHOTO_PATH.is_file():
+        raise HTTPException(status_code=404, detail="demo photo not bundled")
+    return await _ingest_photo(DEMO_PHOTO_PATH.read_bytes(), "demo-room.jpg")
+
+
+async def _ingest_photo(raw: bytes, filename: str) -> dict:
+    import hashlib
+    from io import BytesIO
+    from PIL import Image
     try:
         img = Image.open(BytesIO(raw)).convert("RGB")
     except Exception:
@@ -239,7 +260,7 @@ async def upload_photo(file: UploadFile) -> dict:
         return {"photo_id": existing["id"], "width": existing["width"],
                 "height": existing["height"], "reused": True,
                 "regions": graph["regions"], "bindings": graph["bindings"]}
-    photo_id = add_photo(file.filename or "photo", width, height)
+    photo_id = add_photo(filename, width, height)
     (PHOTOS_DIR / f"{photo_id}.jpg").write_bytes(jpeg)
     set_photo_sha(photo_id, sha)
     photo = get_photo(photo_id)
@@ -712,9 +733,11 @@ class WhatIfRequest(BaseModel):
 
 
 @app.get("/api/automations/proposals")
-async def proposals_list() -> dict:
+async def proposals_list(photo_id: int | None = None) -> dict:
+    """Proposals for one photo only. Unfiltered listing would leak another
+    photo's history into a fresh session, which looks prepopulated."""
     import store as store_module
-    return {"proposals": store_module.list_proposals()}
+    return {"proposals": store_module.list_proposals(photo_id=photo_id)}
 
 
 @app.post("/api/whatif")
