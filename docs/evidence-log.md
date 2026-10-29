@@ -36,3 +36,4 @@ Baseten A/B rows (Oct 30 only): record model string as shown in the Baseten dash
 | 5 | — | fresh-session fix: proposals scoped per photo; What-If empty until upload | — | global history no longer leaks across photos | kept test: filter by photo |
 | 5 | — | demo reset: automations.yaml emptied, 10 registry ghosts scrubbed, HA restarted | — | 23 entities, 0 automations, all devices off; photo 7 graph + 4 bindings intact | `/api/photos/demo` reuses photo 7, no SAM re-spend |
 | 5 | — | Home Map-inspired restyle (2D): pins replace boxes, bottom sheet, ambient header, floating toolbar | — | no new frameworks; boxes only in bind mode; glow = live on-state | 2D by design, no fake 3D |
+| 5 | muse-spark-1.3 | live finding: "unlock the front door" laundered into door->light plan (validator-blind) | ~5 s | model guessed instead of clarifying; fixed with deterministic pre-model intent gate | rejected 422 pre-model, kept test |

@@ -629,6 +629,18 @@ async def suggest_bindings(photo_id: int) -> dict:
 
 # --- Day 4: Spark AutomationIR, deterministic compile, approval ---
 
+import re
+
+BANNED_INTENT_RE = re.compile(
+    r"\b(lock|unlock|alarm|garage|heater|thermostat|cover|blind|shade|"
+    r"curtain|camera|doorbell|disarm|siren|sprinkler|vacuum)\b", re.IGNORECASE)
+
+
+def _banned_intent(text: str) -> str | None:
+    m = BANNED_INTENT_RE.search(text)
+    return m.group(1).lower() if m else None
+
+
 class ProposeRequest(BaseModel):
     photo_id: int
     source_object_id: str
@@ -662,6 +674,17 @@ async def propose_automation(req: ProposeRequest) -> dict:
     source_entity = bindings[req.source_object_id]
     target_entity = bindings[req.target_object_id]
     registry = {s.get("entity_id") for s in await _ha_states()}
+
+    # Deterministic intent gate: the model launders out-of-scope requests
+    # into allowed shapes (observed live: "unlock the front door" became a
+    # door->light plan). The validator sees only the IR, so catch banned
+    # device language here, before any model call or proposal is stored.
+    hit = _banned_intent(req.text or "")
+    if hit:
+        raise HTTPException(
+            status_code=422,
+            detail=f"not supported: '{hit}' devices are outside the demo "
+                   "allowlist (door sensor + lights only). No plan made, no HA write.")
 
     t0 = time.monotonic()
     try:

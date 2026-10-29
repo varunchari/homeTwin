@@ -247,6 +247,34 @@ class ProposeApproveTest(unittest.TestCase):
         r = self.client.post("/api/automations/999999/approve")
         self.assertEqual(r.status_code, 404)
 
+    def test_banned_intent_units(self):
+        self.assertEqual(proxy._banned_intent("unlock the front door"), "unlock")
+        self.assertEqual(proxy._banned_intent("Lock it at night"), "lock")
+        self.assertIsNone(proxy._banned_intent("only after sunset"))
+        self.assertIsNone(proxy._banned_intent(""))
+        self.assertIsNone(proxy._banned_intent("open when the patio door opens"))
+
+    def test_lock_text_rejected_before_model_or_store(self):
+        async def must_not_run(*a, **k):
+            raise AssertionError("Spark must not be called for banned intent")
+
+        spark_client.complete_json = must_not_run
+        try:
+            pid = make_bound_photo(self.client, w=732)
+            before = self.client.get(
+                f"/api/automations/proposals?photo_id={pid}").json()["proposals"]
+            r = self.client.post("/api/automations/propose",
+                                 json={"photo_id": pid, "source_object_id": "door",
+                                       "target_object_id": "lamp",
+                                       "text": "unlock the front door"})
+            self.assertEqual(r.status_code, 422)
+            self.assertIn("allowlist", r.json()["detail"])
+            after = self.client.get(
+                f"/api/automations/proposals?photo_id={pid}").json()["proposals"]
+            self.assertEqual(len(after), len(before))
+        finally:
+            spark_client.complete_json = fake_complete
+
     def test_proposals_filtered_by_photo(self):
         pid_a = make_bound_photo(self.client, w=700)
         pid_b = make_bound_photo(self.client, w=716)
