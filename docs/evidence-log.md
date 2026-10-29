@@ -35,3 +35,4 @@ Baseten A/B rows (Oct 30 only): record model string as shown in the Baseten dash
 | 5 | — | HA engine fix: `automation: !include automations.yaml` + approve-time automation/reload | — | engine saw zero rules before (config API wrote YAML nobody loaded); 7 dup rules cleared, 1 live rule | deploy path was store-only until this | — |
 | 5 | — | fresh-session fix: proposals scoped per photo; What-If empty until upload | — | global history no longer leaks across photos | kept test: filter by photo |
 | 5 | — | demo reset: automations.yaml emptied, 10 registry ghosts scrubbed, HA restarted | — | 23 entities, 0 automations, all devices off; photo 7 graph + 4 bindings intact | `/api/photos/demo` reuses photo 7, no SAM re-spend |
+| 5 | — | Home Map-inspired restyle (2D): pins replace boxes, bottom sheet, ambient header, floating toolbar | — | no new frameworks; boxes only in bind mode; glow = live on-state | 2D by design, no fake 3D |

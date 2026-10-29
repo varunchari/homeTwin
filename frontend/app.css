@@ -45,10 +45,18 @@ body {
   max-width: 80rem; margin: 0 auto;
 }
 .canvas-card {
+  position: relative;
   background: var(--panel); border: 1px solid #2a343e;
   border-radius: 10px; padding: 1rem;
 }
-.canvas-toolbar { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+/* Floating map-style controls over the photo. */
+.canvas-toolbar {
+  position: absolute; top: 1.6rem; left: 1.6rem; right: 1.6rem; z-index: 5;
+  display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;
+  background: rgba(13, 17, 20, 0.88); border: 1px solid #2a343e;
+  border-radius: 8px; padding: 0.5rem;
+}
+#photo-wrap { margin-top: 0.6rem; }
 .file-btn, .btn {
   font: inherit; font-size: 0.85rem; font-weight: 600;
   padding: 0.45rem 0.9rem; border-radius: 6px;
@@ -67,15 +75,54 @@ body {
 #photo { display: block; width: 100%; }
 #photo[hidden] { display: none; }
 #regions { position: absolute; inset: 0; }
-.region {
-  position: absolute; cursor: pointer;
+/* Selection boxes appear only in bind/edit mode; pins are the everyday face. */
+.region.box {
+  position: absolute; cursor: pointer; display: none;
   border: 2px solid var(--sam); background: rgba(52, 211, 153, 0.10);
   border-radius: 4px;
 }
-.region.manual { border-style: dashed; border-color: var(--manual); background: rgba(240, 168, 50, 0.10); }
-.region:hover { background: rgba(52, 211, 153, 0.22); }
-.region.selected { box-shadow: 0 0 0 2px var(--bg), 0 0 14px var(--sam); }
-.region.bound { border-width: 3px; }
+.region.box.manual { border-style: dashed; border-color: var(--manual); background: rgba(240, 168, 50, 0.10); }
+.region.box.selected, body.drawing .region.box { display: block; }
+.region.box.selected { box-shadow: 0 0 0 2px var(--bg), 0 0 14px var(--sam); }
+.region.box.bound { border-width: 3px; }
+/* Device pins: identity at a glance, glow only when actually on. */
+.pin {
+  position: absolute; z-index: 4; cursor: pointer;
+  width: 2rem; height: 2rem; border-radius: 50%;
+  transform: translate(-50%, -50%);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.8rem; font-weight: 700;
+  color: var(--text); background: rgba(13, 17, 20, 0.9);
+  border: 2px solid var(--muted);
+  padding: 0;
+}
+.pin.manual { border-style: dashed; }
+.pin.bound { border-color: var(--sam); }
+.pin.on {
+  border-color: var(--accent); color: var(--accent-ink); background: var(--accent);
+  box-shadow: 0 0 16px rgba(240, 168, 50, 0.8);
+}
+.pin.selected { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--text); }
+.pin.on.selected { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--text), 0 0 16px rgba(240, 168, 50, 0.8); }
+/* Bottom sheet for the selected device. */
+.sheet {
+  position: absolute; left: 1rem; right: 1rem; bottom: 1rem; z-index: 6;
+  background: var(--panel-2); border: 1px solid #3a4653; border-radius: 10px;
+  padding: 0.8rem 1rem;
+}
+.sheet[hidden] { display: none; }
+.sheet-close {
+  float: right; font: inherit; font-size: 1rem; line-height: 1;
+  background: none; border: none; color: var(--muted); cursor: pointer;
+  padding: 0.2rem 0.4rem;
+}
+.sheet-close:hover { color: var(--text); }
+/* Ambient status strip: room, sun, lights-on at a glance. */
+.ambient { display: flex; gap: 1.25rem; align-items: center; font-size: 0.82rem; color: var(--muted); }
+.ambient-item { display: flex; align-items: center; gap: 0.4rem; }
+.ambient .dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: #5a636d; display: inline-block; }
+.ambient .dot.day { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+.ambient .dot.night { background: #6f9fd8; box-shadow: 0 0 6px #6f9fd8; }
 #selected-info { font-size: 0.9rem; margin-bottom: 0.5rem; min-height: 1.4em; }
 #bind-row, #tap-row { display: flex; gap: 0.4rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
 #entity-select {
@@ -116,7 +163,7 @@ body.drawing #photo-wrap { cursor: crosshair; }
   background: var(--panel-2); color: var(--text); border: 1px solid #3a4653;
 }
 .chips .chip:hover { border-color: var(--accent); }
-#phrase-chips { margin-top: 0.6rem; display: flex; }
+#phrase-chips { margin-top: 3.8rem; display: flex; }
 .chips li.sam { border-color: var(--sam); }
 .chips li.manual { border-style: dashed; border-color: var(--manual); }
 .devices { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
@@ -156,6 +203,12 @@ body.drawing #photo-wrap { cursor: crosshair; }
 #whatif-view { margin-top: 0.5rem; }
 @media (max-width: 60rem) {
   .layout { grid-template-columns: 1fr; }
+}
+@media (max-width: 70rem) {
+  /* Narrow: toolbar would wrap and cover the chips, so keep it in flow. */
+  .canvas-toolbar { position: static; }
+  #phrase-chips { margin-top: 0.6rem; }
+  .ambient { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }

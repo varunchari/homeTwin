@@ -17,6 +17,19 @@ function render() {
     li.appendChild(dot);
     listEl.appendChild(li);
   }
+  // Ambient strip: sun + lights-on at a glance. Pins follow live state too.
+  const sun = states.get("sun.sun");
+  const sunState = document.getElementById("sun-state");
+  const sunDot = document.getElementById("sun-dot");
+  if (sunState) {
+    const day = sun === "above_horizon";
+    sunState.textContent = sun ? (day ? "Daytime" : "Night") : "—";
+    if (sunDot) sunDot.className = "dot" + (sun ? (day ? " day" : " night") : "");
+  }
+  const onCount = [...states].filter(([id, st]) => id.startsWith("light.") && st === "on").length;
+  const lightsOn = document.getElementById("lights-on");
+  if (lightsOn) lightsOn.textContent = `${onCount} light${onCount === 1 ? "" : "s"} on`;
+  if (typeof updatePins === "function") updatePins();
 }
 
 async function load() {
@@ -73,12 +86,16 @@ function say(msg) { photoMsg.textContent = msg; }
 let bindings = {};
 let selectedId = null;
 
+let lastRegions = [];
+
 function renderRegions(regions) {
+  lastRegions = regions;
   regionsEl.innerHTML = "";
   regionList.innerHTML = "";
   for (const r of regions) {
     const box = document.createElement("div");
-    box.className = "region" + (r.source === "manual" ? " manual" : "");
+    box.className = "region box" + (r.source === "manual" ? " manual" : "");
+    box.dataset.oid = r.object_id;
     box.style.left = `${r.x * 100}%`;
     box.style.top = `${r.y * 100}%`;
     box.style.width = `${r.w * 100}%`;
@@ -89,18 +106,43 @@ function renderRegions(regions) {
     tag.textContent = r.object_id;
     box.appendChild(tag);
     if (bindings[r.object_id]) box.classList.add("bound");
-    box.addEventListener("click", async (ev) => {
+    regionsEl.appendChild(box);
+    // Device pin: the everyday face. Boxes appear only when selected/drawing.
+    const pin = document.createElement("button");
+    pin.className = "pin" + (r.source === "manual" ? " manual" : "");
+    pin.dataset.oid = r.object_id;
+    pin.style.left = `${(r.x + r.w / 2) * 100}%`;
+    pin.style.top = `${(r.y + r.h / 2) * 100}%`;
+    pin.title = `${r.object_id} (${r.source})`;
+    pin.textContent = r.object_id.charAt(0).toUpperCase();
+    if (bindings[r.object_id]) pin.classList.add("bound");
+    const activate = async (ev) => {
       if (drawing) return;
       ev.stopPropagation();
       selectRegion(r.object_id);
       if (bindings[r.object_id]) await tapSelected();
-    });
-    regionsEl.appendChild(box);
+    };
+    pin.addEventListener("click", activate);
+    box.addEventListener("click", activate);
+    regionsEl.appendChild(pin);
     const li = document.createElement("li");
     li.className = r.source;
     li.textContent = `${r.object_id} · ${r.phrase}`;
     li.title = `source: ${r.source}`;
     regionList.appendChild(li);
+  }
+  if (selectedId) showSelected(selectedId);
+  updatePins();
+}
+
+function updatePins() {
+  for (const pin of regionsEl.querySelectorAll(".pin")) {
+    const entity = bindings[pin.dataset.oid];
+    pin.classList.toggle("on", !!entity && states.get(entity) === "on");
+    pin.classList.toggle("selected", pin.dataset.oid === selectedId);
+  }
+  for (const box of regionsEl.querySelectorAll(".box")) {
+    box.classList.toggle("selected", box.dataset.oid === selectedId);
   }
 }
 
@@ -116,11 +158,18 @@ async function refreshGraph() {
 
 function selectRegion(objectId) {
   selectedId = objectId;
-  for (const el of regionsEl.children) {
-    el.classList.toggle("selected", el.title.startsWith(objectId + " "));
-  }
+  document.getElementById("sheet").hidden = false;
   showSelected(objectId);
+  updatePins();
 }
+
+function deselect() {
+  selectedId = null;
+  document.getElementById("sheet").hidden = true;
+  updatePins();
+}
+document.getElementById("sheet-close").addEventListener("click", deselect);
+photoEl.addEventListener("click", () => { if (!drawing) deselect(); });
 
 function showSelected(objectId) {
   const info = document.getElementById("selected-info");

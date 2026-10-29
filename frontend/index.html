@@ -13,6 +13,11 @@
       <span class="brand-name">HomeTwin</span>
       <span class="brand-sub">spatial home studio</span>
     </div>
+    <div class="ambient">
+      <span class="ambient-item">Demo room</span>
+      <span class="ambient-item"><span id="sun-dot" class="dot"></span><span id="sun-state">—</span></span>
+      <span class="ambient-item"><span id="lights-on">—</span></span>
+    </div>
     <div id="status" class="live-pill">Connecting…</div>
   </header>
 
@@ -31,15 +36,12 @@
       <div id="photo-wrap">
         <img id="photo" alt="Room photo" hidden />
         <div id="regions"></div>
-        <div id="photo-empty">Upload the demo room photo to begin.<br />Tap a glowing region to select it.</div>
+        <div id="photo-empty">Upload a photo — or use the demo room — to begin.<br />Then tap a device pin to select it.</div>
       </div>
       <p id="photo-msg"></p>
-    </section>
-
-    <aside class="panel">
-      <section>
-        <h2>Selected</h2>
-        <div id="selected-info">Tap a region in the photo.</div>
+      <section id="sheet" class="sheet" hidden>
+        <button id="sheet-close" class="sheet-close" title="Deselect">×</button>
+        <div id="selected-info">Tap a pin in the photo.</div>
         <div id="bind-row">
           <select id="entity-select"></select>
           <button id="bind-btn" class="btn">Bind</button>
@@ -50,6 +52,9 @@
           <button id="reset-btn" class="btn">Reset baseline</button>
         </div>
       </section>
+    </section>
+
+    <aside class="panel">
       <section>
         <h2>Auto-bind</h2>
         <button id="suggest-btn" class="btn primary">Suggest bindings</button>
