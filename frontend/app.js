@@ -35,6 +35,7 @@ function render() {
   const autoCountEl = document.getElementById("auto-count");
   if (autoCountEl) autoCountEl.textContent = `${autoCount} automation${autoCount === 1 ? "" : "s"}`;
   if (typeof updatePins === "function") updatePins();
+  if (typeof syncEntitySelect === "function") syncEntitySelect();
 }
 
 async function load() {
@@ -159,12 +160,12 @@ function renderRegions(regions) {
   updatePins();
 }
 
-// Pin pills carry names, not letters: the bound device's first name word
-// (Reading, Floor, TV, Display), or the region name when unbound.
+// Pin pills carry full device names ("Reading Light", not "Reading") so two
+// same-letter regions are never ambiguous. Falls back to region name.
 function shortPinLabel(oid) {
   const entity = bindings[oid];
-  if (entity) return prettyEntity(entity).split(" ")[0];
-  return prettyOid(oid).slice(0, 12);
+  if (entity) return prettyEntity(entity);
+  return prettyOid(oid);
 }
 
 function updatePins() {
@@ -229,6 +230,11 @@ function showSelected(objectId) {
   info.textContent = bound
     ? `${prettyOid(objectId)} → ${prettyEntity(bound)}`
     : `${prettyOid(objectId)} (unbound)`;
+  // The picker follows the selection: preselect the bound device when bound.
+  if (entitySelect && bound &&
+      [...entitySelect.options].some((o) => o.value === bound)) {
+    entitySelect.value = bound;
+  }
 }
 
 const sourceSelect = document.getElementById("source-select");
@@ -390,22 +396,29 @@ function noteNames(entities) {
 }
 const entitySelect = document.getElementById("entity-select");
 const BINDABLE_INPUTS = ["input_boolean.tv_on", "input_boolean.display_on"];
+function syncEntitySelect() {
+  // Manual bind picker follows live state: rebuilt from the states map on
+  // every render, so its (on/off) suffix can never go stale.
+  if (!entitySelect) return;
+  const keep = selectedId && bindings[selectedId] ? bindings[selectedId] : entitySelect.value;
+  entitySelect.innerHTML = "";
+  for (const [id, st] of states) {
+    const domain = id.split(".")[0];
+    if (domain !== "light" && domain !== "binary_sensor" &&
+        !BINDABLE_INPUTS.includes(id)) continue;
+    const opt = document.createElement("option");
+    opt.value = id;
+    opt.textContent = `${prettyEntity(id)} (${st})`;
+    entitySelect.appendChild(opt);
+  }
+  if ([...entitySelect.options].some((o) => o.value === keep)) entitySelect.value = keep;
+}
 async function refreshEntities() {
   // Manual bind picker (P0 baseline if auto-bind ever fails) + name map.
   const res = await fetch("/api/entities");
   const entities = await res.json();
   noteNames(entities);
-  if (!entitySelect) return;
-  entitySelect.innerHTML = "";
-  for (const e of entities) {
-    const domain = e.entity_id.split(".")[0];
-    if (domain !== "light" && domain !== "binary_sensor" &&
-        !BINDABLE_INPUTS.includes(e.entity_id)) continue;
-    const opt = document.createElement("option");
-    opt.value = e.entity_id;
-    opt.textContent = `${prettyEntity(e.entity_id)} (${e.state})`;
-    entitySelect.appendChild(opt);
-  }
+  syncEntitySelect();
 }
 document.getElementById("bind-btn").addEventListener("click", async () => {
   if (!photoId || !selectedId || !entitySelect) { say("Select a region first."); return; }
@@ -474,20 +487,26 @@ document.getElementById("suggest-btn").addEventListener("click", async () => {
   proposalList.appendChild(all);
 });
 document.getElementById("reset-btn").addEventListener("click", async () => {
+  const btn = document.getElementById("reset-btn");
+  btn.disabled = true; // one reset at a time; double-clicks read as failures
   const res = await fetch("/api/reset", { method: "POST" });
-  if (!res.ok) { say("Reset failed."); return; }
+  if (!res.ok) { say("Reset failed."); btn.disabled = false; return; }
   const body = await res.json();
   // A reset must LOOK like a reset: panels refresh from the server so no
   // stale automation, plan, or preview survives on screen.
   planView.innerHTML = "";
   whatifView.innerHTML = "";
   proposalList.innerHTML = "";
+  autoText.value = "";
+  whatifDoor.value = "on";
+  whatifSun.value = "day";
   deselect();
   await load();
   if (photoId) { await refreshGraph(); await refreshProposals(); }
   const n = (body.automations_cleared || []).length;
   say(`Baseline restored: everything off, ${n} automation${n === 1 ? "" : "s"} deleted, ` +
     `${body.bindings_cleared || 0} bindings cleared. Suggest bindings to start over.`);
+  document.getElementById("reset-btn").disabled = false;
 });
 
 document.getElementById("demo-btn").addEventListener("click", async () => {
