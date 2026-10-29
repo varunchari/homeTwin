@@ -68,6 +68,18 @@
           <select id="target-select" title="Action region"></select>
         </div>
         <input id="auto-text" placeholder="Instruction — e.g. after sunset, off after a minute" />
+        <div id="auto-row-opts">
+          <select id="auto-delay" title="Auto-off delay (overrides text parsing)">
+            <option value="">Auto-off: from instruction text</option>
+            <option value="0">Auto-off: none</option>
+            <option value="60">Auto-off after 1 minute (live test)</option>
+            <option value="300">Auto-off after 5 minutes</option>
+          </select>
+          <select id="auto-provider" title="Model for this plan">
+            <option value="hosted">Model: Hosted Muse Spark</option>
+            <option value="open">Model: Open-weight via Baseten (labelled)</option>
+          </select>
+        </div>
         <button id="plan-btn" class="btn primary" disabled title="Bind a region first">Generate plan</button>
         <div id="plan-view"></div>
       </section>
@@ -100,7 +112,9 @@
     </aside>
   </main>
 
-  <!-- Day 3: binding, tap-to-control. Day 4: draw-to-automate. -->
+  <!-- Day 3: binding, tap-to-control. Day 4: select-to-automate (dropdowns
+       over draw-an-arrow: only bound regions, no ambiguous gesture parsing).
+       Draw region remains only as the manual fallback when SAM misses. -->
   <script src="/static/app.js"></script>
 </body>
 </html>

@@ -259,6 +259,8 @@ document.getElementById("plan-btn").addEventListener("click", async () => {
   if (!sourceSelect.value || !targetSelect.value) { say("Bind regions first."); return; }
   say("Asking Spark for an automation plan…");
   planView.innerHTML = "";
+  const delayEl = document.getElementById("auto-delay");
+  const providerEl = document.getElementById("auto-provider");
   const res = await fetch("/api/automations/propose", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -267,6 +269,8 @@ document.getElementById("plan-btn").addEventListener("click", async () => {
       source_object_id: sourceSelect.value,
       target_object_id: targetSelect.value,
       text: autoText.value,
+      provider: providerEl ? providerEl.value : "hosted",
+      delay_s: delayEl && delayEl.value !== "" ? Number(delayEl.value) : null,
     }),
   });
   const body = await res.json();
@@ -283,11 +287,14 @@ document.getElementById("plan-btn").addEventListener("click", async () => {
   const ir = body.ir;
   const cond = ir.condition ? ` when sun ${ir.condition.sun.replace("_", " ")}` : "";
   const delay = ir.delay_s ? `, off after ${ir.delay_s}s` : "";
+  const providerNote = body.provider === "open"
+    ? `<br /><span class="muted">Via open-weight model on Baseten (${body.model || "see host config"}) — same prompt, schema, validator and compiler as hosted.</span>`
+    : `<br /><span class="muted">Via hosted ${body.model || "Muse Spark"}.</span>`;
   div.innerHTML = `<strong>${ir.description || "Automation plan"}</strong>` +
     `<br />${prettyEntity(ir.trigger.entity_id)} → ${prettyEntity(ir.action.entity_id)}${cond}${delay}` +
     `<br /><span class="muted">Compiled ${body.compiled.trigger.length} trigger(s), ` +
     `${body.compiled.action.length} action step(s) in ${body.latency_ms} ms. ` +
-    `Approval required before deploy.</span>`;
+    `Approval required before deploy.</span>` + providerNote;
   const btn = document.createElement("button");
   btn.className = "btn primary";
   btn.textContent = "Approve & deploy";
@@ -357,9 +364,12 @@ document.getElementById("whatif-btn").addEventListener("click", async () => {
   whatifView.innerHTML = "";
   const div = document.createElement("div");
   div.className = "plan" + (body.fires ? "" : " rejected");
+  const delayNote = res.ok && body.fires && body.delay_s
+    ? ` Then off after ${body.delay_s}s.`
+    : "";
   div.textContent = res.ok
     ? (body.fires
-      ? `SIMULATED: fires — ${body.condition_note}.`
+      ? `SIMULATED: fires — ${body.condition_note}.${delayNote}`
       : `SIMULATED: no fire — ${body.condition_note}.`)
     : `What-If failed: ${body.detail || res.status}`;
   whatifView.appendChild(div);

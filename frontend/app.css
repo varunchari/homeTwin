@@ -210,8 +210,8 @@ body.drawing #photo-wrap { cursor: crosshair; }
   display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;
 }
 #suggest-btn { margin-bottom: 0.2rem; }
-#auto-row { display: flex; flex-direction: column; gap: 0.4rem; align-items: stretch; margin-bottom: 0.5rem; }
-#auto-row select { width: 100%; font: inherit; font-size: 0.8rem; padding: 0.4rem; border-radius: 6px; border: 1px solid #3a4653; background: #0d1114; color: var(--text); }
+#auto-row, #auto-row-opts { display: flex; flex-direction: column; gap: 0.4rem; align-items: stretch; margin-bottom: 0.5rem; }
+#auto-row select, #auto-row-opts select { width: 100%; font: inherit; font-size: 0.8rem; padding: 0.4rem; border-radius: 6px; border: 1px solid #3a4653; background: #0d1114; color: var(--text); }
 #auto-row .arrow { color: var(--muted); text-align: center; transform: rotate(90deg); }
 #auto-text { width: 100%; font: inherit; font-size: 0.85rem; padding: 0.45rem 0.6rem; border-radius: 6px; border: 1px solid #3a4653; background: #0d1114; color: var(--text); margin-bottom: 0.5rem; }
 #plan-btn { width: 100%; }
