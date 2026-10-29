@@ -132,12 +132,7 @@ body {
 .ambient .dot.day { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
 .ambient .dot.night { background: #6f9fd8; box-shadow: 0 0 6px #6f9fd8; }
 #selected-info { font-size: 0.9rem; margin-bottom: 0.5rem; min-height: 1.4em; }
-#bind-row, #tap-row { display: flex; gap: 0.4rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
-#entity-select {
-  flex: 1; min-width: 8rem; font: inherit; font-size: 0.8rem;
-  padding: 0.4rem; border-radius: 6px;
-  border: 1px solid #3a4653; background: #0d1114; color: var(--text);
-}
+#tap-row { display: flex; gap: 0.4rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
 .region .tag {
   position: absolute; top: -1.5em; left: -2px;
   font-size: 0.72rem; font-weight: 600; white-space: nowrap;

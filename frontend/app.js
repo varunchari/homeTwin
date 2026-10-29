@@ -272,9 +272,19 @@ document.getElementById("plan-btn").addEventListener("click", async () => {
   btn.className = "btn primary";
   btn.textContent = "Approve & deploy";
   btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    btn.textContent = "Deploying…";
     const r2 = await fetch(`/api/automations/${body.proposal_id}/approve`, { method: "POST" });
     const b2 = await r2.json();
-    say(r2.ok ? `Deployed ${b2.automation_id}.` : `Deploy failed: ${b2.detail || r2.status}`);
+    if (r2.ok) {
+      btn.textContent = `Deployed ${b2.automation_id}`;
+      say(`Deployed ${b2.automation_id}.`);
+      await refreshProposals();
+    } else {
+      btn.disabled = false;
+      btn.textContent = "Approve & deploy";
+      say(`Deploy failed: ${b2.detail || r2.status}`);
+    }
   });
   div.appendChild(document.createElement("br"));
   div.appendChild(btn);
@@ -338,7 +348,6 @@ async function tapSelected() {
   say(res.ok ? `Tapped ${selectedId} (${body.action}). Watch the Devices panel.` : `Tap failed: ${body.detail || res.status}`);
 }
 
-const entitySelect = document.getElementById("entity-select");
 // Friendly display names everywhere: HA entity_ids never surface in the UI.
 // Values stay entity_ids; only labels are humanized.
 const names = new Map();
@@ -356,34 +365,12 @@ function noteNames(entities) {
     if (friendly) names.set(e.entity_id, friendly);
   }
 }
-const BINDABLE_INPUTS = ["input_boolean.tv_on", "input_boolean.display_on"];
 async function refreshEntities() {
+  // Friendly names feed every label; the manual bind dropdown is gone
+  // (auto-bind covers binding), so this only refreshes the name map.
   const res = await fetch("/api/entities");
-  const entities = await res.json();
-  noteNames(entities);
-  entitySelect.innerHTML = "";
-  for (const e of entities) {
-    const domain = e.entity_id.split(".")[0];
-    if (domain !== "light" && domain !== "binary_sensor" &&
-        !BINDABLE_INPUTS.includes(e.entity_id)) continue;
-    const opt = document.createElement("option");
-    opt.value = e.entity_id;
-    opt.textContent = `${prettyEntity(e.entity_id)} (${e.state})`;
-    entitySelect.appendChild(opt);
-  }
+  noteNames(await res.json());
 }
-
-document.getElementById("bind-btn").addEventListener("click", async () => {
-  if (!photoId || !selectedId) { say("Select a region first."); return; }
-  const res = await fetch(`/api/photos/${photoId}/bindings`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ object_id: selectedId, entity_id: entitySelect.value }),
-  });
-  const body = await res.json();
-  say(res.ok ? `Bound ${prettyOid(selectedId)} → ${prettyEntity(entitySelect.value)}.` : `Bind failed: ${body.detail || res.status}`);
-  await refreshGraph();
-});
 
 document.getElementById("unbind-btn").addEventListener("click", async () => {
   if (!photoId || !selectedId) return;
@@ -391,8 +378,6 @@ document.getElementById("unbind-btn").addEventListener("click", async () => {
   say(`Unbound ${selectedId}.`);
   await refreshGraph();
 });
-
-document.getElementById("tap-btn").addEventListener("click", tapSelected);
 
 const proposalList = document.getElementById("proposal-list");
 async function applyProposal(p) {
