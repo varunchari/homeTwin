@@ -141,7 +141,13 @@ function renderRegions(regions) {
     regionsEl.appendChild(pin);
     const li = document.createElement("li");
     li.className = r.source;
-    li.textContent = `${r.object_id} · ${r.phrase}`;
+    li.dataset.oid = r.object_id;
+    const label = document.createElement("span");
+    label.textContent = `${r.object_id} · ${r.phrase}`;
+    li.appendChild(label);
+    const badge = document.createElement("span");
+    badge.className = "state-badge";
+    li.appendChild(badge);
     li.title = `source: ${r.source}`;
     regionList.appendChild(li);
   }
@@ -161,6 +167,20 @@ function updatePins() {
   for (const screen of regionsEl.querySelectorAll(".screen")) {
     const entity = bindings[screen.dataset.oid];
     screen.classList.toggle("on", !!entity && states.get(entity) === "on");
+  }
+  // Region list mirrors live state: ON/OFF for bound regions, source tag otherwise.
+  for (const li of regionList.querySelectorAll("li[data-oid]")) {
+    const badge = li.querySelector(".state-badge");
+    if (!badge) continue;
+    const entity = bindings[li.dataset.oid];
+    if (!entity) {
+      badge.textContent = li.className.includes("manual") ? "hand-drawn" : "unbound";
+      badge.classList.remove("on");
+    } else {
+      const on = states.get(entity) === "on";
+      badge.textContent = on ? "ON" : "OFF";
+      badge.classList.toggle("on", on);
+    }
   }
 }
 
