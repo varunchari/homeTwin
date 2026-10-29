@@ -574,12 +574,14 @@ MATCH_SCHEMA = {
 
 
 def _spark_log(photo_id: int, latency_ms: int, n: int, status: str,
-                 raw: list | None = None) -> None:
+                 raw: list | None = None, model: str | None = None,
+                 provider: str = "hosted") -> None:
     import json
     import time
     from spark_client import SPARK_MODEL
     with open(DATA_DIR / "spark_calls.jsonl", "a") as f:
-        f.write(json.dumps({"ts": time.time(), "model": SPARK_MODEL,
+        f.write(json.dumps({"ts": time.time(), "model": model or SPARK_MODEL,
+                            "provider": provider,
                             "photo_id": photo_id, "latency_ms": latency_ms,
                             "n_proposals": n, "status": status,
                             "raw_matches": raw or []}) + "\n")
@@ -682,6 +684,12 @@ class ProposeRequest(BaseModel):
     source_object_id: str
     target_object_id: str
     text: str = ""
+    # "hosted" = Meta Model API muse-spark-1.3 (default).
+    # "open" = Baseten open-weight path, labelled in the UI and in logs.
+    provider: str = "hosted"
+    # None = use the model's text-derived delay; an int deterministically
+    # overrides it (Automate delay dropdown). Validated before any HA write.
+    delay_s: int | None = None
 
 
 @app.post("/api/automations/propose")
@@ -692,10 +700,22 @@ async def propose_automation(req: ProposeRequest) -> dict:
     before any write. Invalid plans return 422 with plain-language reasons.
     """
     import time
-    from automation import (IR_SCHEMA, IR_SYSTEM, build_ir_prompt, compile_ir,
-                            validate_ir)
-    from spark_client import SparkError, complete_json
+    from automation import (IR_SCHEMA, IR_SYSTEM, apply_delay_override,
+                            build_ir_prompt, compile_ir, validate_ir)
+    from spark_client import (SPARK_MODEL, SparkError, complete_json,
+                              open_provider_config)
     import store as store_module
+
+    if req.provider not in ("hosted", "open"):
+        raise HTTPException(status_code=422,
+                            detail="provider must be 'hosted' or 'open'")
+    if req.provider == "open":
+        try:
+            model_api_base, model_name, model_api_key = open_provider_config()
+        except SparkError as e:
+            raise HTTPException(status_code=503, detail=str(e))
+    else:
+        model_api_base, model_name, model_api_key = None, SPARK_MODEL, None
 
     graph = scene_graph(req.photo_id)
     if not graph:
@@ -726,11 +746,20 @@ async def propose_automation(req: ProposeRequest) -> dict:
     try:
         ir = await complete_json(
             IR_SYSTEM, build_ir_prompt(source_entity, target_entity, req.text),
-            IR_SCHEMA)
+            IR_SCHEMA, model=model_name, api_base=model_api_base,
+            api_key=model_api_key)
     except SparkError as e:
         raise HTTPException(status_code=502, detail=f"Spark failed: {e}")
     latency_ms = int((time.monotonic() - t0) * 1000)
-    _spark_log(req.photo_id, latency_ms, 1, "ir", [ir])
+    _spark_log(req.photo_id, latency_ms, 1, "ir", [ir],
+                 model=model_name, provider=req.provider)
+
+    # Explicit delay dropdown beats text parsing: deterministic, and the
+    # delay beat no longer depends on the model hearing "after a minute".
+    try:
+        ir = apply_delay_override(ir, req.delay_s)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
     reasons = validate_ir(ir, registry)
     if reasons:
@@ -741,7 +770,8 @@ async def propose_automation(req: ProposeRequest) -> dict:
     proposal = store_module.get_proposal(proposal_id)
     return {"proposal_id": proposal_id, "ir": ir,
             "compiled": proposal["compiled"], "latency_ms": latency_ms,
-            "approval_required": True}
+            "approval_required": True, "provider": req.provider,
+            "model": model_name}
 
 
 @app.post("/api/automations/{proposal_id}/approve")
@@ -834,6 +864,7 @@ async def what_if(req: WhatIfRequest) -> dict:
             "inputs": {"door": req.door, "sun": req.sun},
             "trigger_match": trigger_match, "condition_pass": condition_pass,
             "condition_note": condition_note, "fires": fires,
+            "delay_s": proposal["ir"].get("delay_s", 0),
             "action": compiled["action"] if fires else []}
 
 

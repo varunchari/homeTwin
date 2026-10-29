@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
 import app as proxy  # noqa: E402
 import spark_client  # noqa: E402
-from automation import compile_ir, validate_ir  # noqa: E402
+from automation import apply_delay_override, compile_ir, validate_ir  # noqa: E402
 
 REGISTRY = {"binary_sensor.patio_door", "light.floor_lamp",
             "light.string_lights", "light.reading_light"}
@@ -82,6 +82,53 @@ class CompileTest(unittest.TestCase):
         self.assertEqual(len(out["action"]), 3)
         self.assertEqual(out["action"][1], {"delay": "00:01:00"})
         self.assertEqual(out["action"][2]["service"], "light.turn_off")
+
+
+class DelayOverrideTest(unittest.TestCase):
+    def test_none_keeps_model_delay(self):
+        self.assertEqual(apply_delay_override(valid_ir(delay_s=60), None)["delay_s"], 60)
+
+    def test_explicit_override_replaces_model_delay(self):
+        self.assertEqual(apply_delay_override(valid_ir(delay_s=0), 60)["delay_s"], 60)
+        self.assertEqual(apply_delay_override(valid_ir(delay_s=60), 0)["delay_s"], 0)
+
+    def test_override_out_of_range_rejected(self):
+        with self.assertRaises(ValueError):
+            apply_delay_override(valid_ir(), 3601)
+        with self.assertRaises(ValueError):
+            apply_delay_override(valid_ir(), -1)
+
+
+class BasetenConfigTest(unittest.TestCase):
+    def test_missing_key_or_model_is_configuration_error(self):
+        saved_key = os.environ.pop("BASETEN_API_KEY", None)
+        saved_model = os.environ.pop("BASETEN_MODEL", None)
+        try:
+            with self.assertRaises(spark_client.SparkError):
+                spark_client.open_provider_config()
+            os.environ["BASETEN_API_KEY"] = "test-key-not-real"
+            with self.assertRaises(spark_client.SparkError):
+                spark_client.open_provider_config()
+        finally:
+            if saved_key is not None:
+                os.environ["BASETEN_API_KEY"] = saved_key
+            else:
+                os.environ.pop("BASETEN_API_KEY", None)
+            if saved_model is not None:
+                os.environ["BASETEN_MODEL"] = saved_model
+            else:
+                os.environ.pop("BASETEN_MODEL", None)
+
+    def test_configured_values_returned_without_hardcoded_model(self):
+        os.environ["BASETEN_API_KEY"] = "test-key-not-real"
+        os.environ["BASETEN_MODEL"] = "dashboard-model-under-test"
+        try:
+            base, model, _key = spark_client.open_provider_config()
+            self.assertEqual(base, "https://inference.baseten.co/v1")
+            self.assertEqual(model, "dashboard-model-under-test")
+        finally:
+            os.environ.pop("BASETEN_API_KEY", None)
+            os.environ.pop("BASETEN_MODEL", None)
 
 
 HA_STATES = [
@@ -209,6 +256,66 @@ class ProposeApproveTest(unittest.TestCase):
         self.assertIn("trigger", body["compiled"])
         self.assertEqual(body["compiled"]["trigger"][0]["entity_id"],
                          "binary_sensor.patio_door")
+
+    def test_propose_delay_dropdown_overrides_model(self):
+        pid = make_bound_photo(self.client, w=501)
+        body = self.client.post("/api/automations/propose",
+                                json={"photo_id": pid, "source_object_id": "door",
+                                      "target_object_id": "lamp", "text": "",
+                                      "delay_s": 60}).json()
+        self.assertEqual(body["ir"]["delay_s"], 60)
+        self.assertEqual(len(body["compiled"]["action"]), 3)
+        self.assertEqual(body["compiled"]["action"][1], {"delay": "00:01:00"})
+        self.assertEqual(body["provider"], "hosted")
+
+    def test_propose_unknown_provider_rejected(self):
+        pid = make_bound_photo(self.client, w=502)
+        r = self.client.post("/api/automations/propose",
+                             json={"photo_id": pid, "source_object_id": "door",
+                                   "target_object_id": "lamp", "text": "",
+                                   "provider": "other"})
+        self.assertEqual(r.status_code, 422)
+
+    def test_propose_open_without_host_config_is_503(self):
+        saved_key = os.environ.pop("BASETEN_API_KEY", None)
+        saved_model = os.environ.pop("BASETEN_MODEL", None)
+        try:
+            pid = make_bound_photo(self.client, w=503)
+            r = self.client.post("/api/automations/propose",
+                                 json={"photo_id": pid, "source_object_id": "door",
+                                       "target_object_id": "lamp", "text": "",
+                                       "provider": "open"})
+            self.assertEqual(r.status_code, 503)
+        finally:
+            if saved_key is not None:
+                os.environ["BASETEN_API_KEY"] = saved_key
+            if saved_model is not None:
+                os.environ["BASETEN_MODEL"] = saved_model
+
+    def test_propose_open_routes_to_baseten_config(self):
+        seen = {}
+
+        async def capturing(system, user, schema, model="x", api_base=None, api_key=None):
+            seen.update(model=model, api_base=api_base, api_key=api_key)
+            return dict(SPARK_IR)
+
+        os.environ["BASETEN_API_KEY"] = "test-key-not-real"
+        os.environ["BASETEN_MODEL"] = "dashboard-model-under-test"
+        spark_client.complete_json = capturing
+        try:
+            pid = make_bound_photo(self.client, w=504)
+            body = self.client.post("/api/automations/propose",
+                                    json={"photo_id": pid, "source_object_id": "door",
+                                          "target_object_id": "lamp", "text": "",
+                                          "provider": "open"}).json()
+            self.assertEqual(body["provider"], "open")
+            self.assertEqual(body["model"], "dashboard-model-under-test")
+            self.assertEqual(seen["api_base"], "https://inference.baseten.co/v1")
+            self.assertEqual(seen["model"], "dashboard-model-under-test")
+        finally:
+            spark_client.complete_json = fake_complete
+            os.environ.pop("BASETEN_API_KEY", None)
+            os.environ.pop("BASETEN_MODEL", None)
 
     def test_propose_unbound_source_conflicts(self):
         pid = make_bound_photo(self.client, w=516)

@@ -103,6 +103,24 @@ def validate_ir(ir: dict, registry: set[str]) -> list[str]:
     return reasons
 
 
+def apply_delay_override(ir: dict, delay_s: int | None) -> dict:
+    """Deterministic delay override for the Automate dropdown.
+
+    None means "use the model's text-derived delay". An explicit value
+    replaces it before validation, so the delay beat does not depend on
+    Spark parsing "off after a minute" correctly. The compiled form is
+    unchanged: turn_on, delay, turn_off (pattern 3).
+    """
+    if delay_s is None:
+        return ir
+    if isinstance(delay_s, bool) or not isinstance(delay_s, int) \
+            or not 0 <= delay_s <= 3600:
+        raise ValueError("Delay must be 0–3600 seconds.")
+    out = dict(ir)
+    out["delay_s"] = delay_s
+    return out
+
+
 def norm_condition(ir: dict) -> dict | None:
     """Explicit null sun counts as absent (models often emit it)."""
     condition = ir.get("condition")

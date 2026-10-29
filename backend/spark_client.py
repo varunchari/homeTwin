@@ -12,6 +12,27 @@ import os
 
 SPARK_BASE_URL = "https://api.meta.ai/v1"
 SPARK_MODEL = os.environ.get("SPARK_MODEL", "muse-spark-1.3")
+BASETEN_BASE_URL = "https://inference.baseten.co/v1"
+
+
+def open_provider_config() -> tuple[str, str, str]:
+    """Baseten open-weight config, from host env only — never hard-coded.
+
+    The exact model string must come from the Baseten dashboard
+    (BASETEN_MODEL). An unverified dated label from an email is not a
+    safe default, so a missing value is a configuration error, not a
+    silent fallback to a possibly wrong model id. Returns
+    (api_base, model, api_key).
+    """
+    api_key = os.environ.get("BASETEN_API_KEY", "")
+    if not api_key:
+        raise SparkError("BASETEN_API_KEY is not configured on the host")
+    model = os.environ.get("BASETEN_MODEL", "")
+    if not model:
+        raise SparkError(
+            "BASETEN_MODEL is not configured on the host — set it to the "
+            "exact model string shown in the Baseten dashboard")
+    return BASETEN_BASE_URL, model, api_key
 
 
 class SparkError(RuntimeError):
