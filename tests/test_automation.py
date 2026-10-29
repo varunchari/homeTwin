@@ -300,7 +300,8 @@ class ProposeApproveTest(unittest.TestCase):
         self.assertNotIn(aid, DEPLOYED)
         listed = self.client.get(
             f"/api/automations/proposals?photo_id={pid}").json()["proposals"]
-        self.assertEqual(listed[0]["status"], "reset")
+        self.assertEqual(listed, [])
+        self.assertGreaterEqual(body["history_cleared"], 1)
         again = self.client.post("/api/reset").json()
         self.assertEqual(again["automations_cleared"], [])
         SERVICE_CALLS.clear()
@@ -322,6 +323,13 @@ class ProposeApproveTest(unittest.TestCase):
         self.assertEqual(body["action"], "toggle")
         self.assertIn("input_boolean/toggle", SERVICE_CALLS)
         SERVICE_CALLS.clear()
+
+    def test_index_never_caches_with_versioned_assets(self):
+        r = self.client.get("/")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("no-store", r.headers.get("cache-control", ""))
+        self.assertRegex(r.text, r"/static/app\.js\?v=\d+")
+        self.assertRegex(r.text, r"/static/app\.css\?v=\d+")
 
     def test_proposals_filtered_by_photo(self):
         pid_a = make_bound_photo(self.client, w=700)

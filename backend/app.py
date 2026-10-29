@@ -14,7 +14,7 @@ from pathlib import Path
 
 import httpx
 import websockets
-from fastapi import FastAPI, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Response, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -163,8 +163,22 @@ if FRONTEND_DIR.is_dir():
     app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 
     @app.get("/")
-    async def index() -> FileResponse:
-        return FileResponse(str(FRONTEND_DIR / "index.html"))
+    async def index() -> Response:
+        # Never cache the shell: otherwise browsers keep showing a stale UI
+        # after deploys. Asset URLs carry the files' mtime so a new deploy
+        # is a new URL and cannot be served from cache either.
+        from fastapi.responses import HTMLResponse
+
+        def _v(name: str) -> str:
+            try:
+                return str(int((FRONTEND_DIR / name).stat().st_mtime))
+            except OSError:
+                return "0"
+
+        html = (FRONTEND_DIR / "index.html").read_text()
+        html = html.replace("/static/app.js", f"/static/app.js?v={_v('app.js')}")
+        html = html.replace("/static/app.css", f"/static/app.css?v={_v('app.css')}")
+        return HTMLResponse(html, headers={"Cache-Control": "no-store, must-revalidate"})
 
 
 # --- Day 2: photo upload, SAM segmentation, scene graph, manual fallback ---
@@ -857,8 +871,10 @@ async def reset_baseline() -> dict:
                 store_module.set_proposal_status(p["id"], "reset")
                 cleared.append(automation_id)
     await _ha_service("automation/reload", {})
+    # Trial-run cleanup: executed history goes, unapproved drafts stay.
+    history_cleared = store_module.delete_proposals(("deployed", "reset"))
     return {"ok": True, "inputs_off": BASELINE_INPUTS, "lights_off": BASELINE_LIGHTS,
-            "automations_cleared": cleared}
+            "automations_cleared": cleared, "history_cleared": history_cleared}
 
 
 @app.delete("/api/photos/{photo_id}/regions/{object_id}")

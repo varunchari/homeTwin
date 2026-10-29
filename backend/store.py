@@ -284,6 +284,19 @@ def set_proposal_status(proposal_id: int, status: str) -> None:
         conn.close()
 
 
+def delete_proposals(statuses: tuple[str, ...]) -> int:
+    """Delete proposal history rows (trial-run cleanup). Pending drafts kept."""
+    conn = connect()
+    try:
+        cur = conn.execute(
+            f"DELETE FROM proposals WHERE status IN "
+            f"({','.join('?' * len(statuses))})", statuses)
+        conn.commit()
+        return cur.rowcount
+    finally:
+        conn.close()
+
+
 def list_bindings(photo_id: int) -> dict[str, str]:
     conn = connect()
     try:
