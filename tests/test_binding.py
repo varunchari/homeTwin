@@ -127,6 +127,14 @@ class TapTest(unittest.TestCase):
         cls.client.post(f"/api/photos/{cls.pid}/bindings",
                         json={"object_id": "door", "entity_id": "binary_sensor.patio_door"})
 
+    def setUp(self):
+        # Reset (under test here too) clears all bindings: rebind every time.
+        self.client.post(f"/api/photos/{self.pid}/bindings",
+                         json={"object_id": "lamp", "entity_id": "light.floor_lamp"})
+        self.client.post(f"/api/photos/{self.pid}/bindings",
+                         json={"object_id": "door",
+                               "entity_id": "binary_sensor.patio_door"})
+
     def test_tap_unknown_region(self):
         r = self.client.post(f"/api/photos/{self.pid}/tap", json={"object_id": "ghost"})
         self.assertEqual(r.status_code, 404)

@@ -41,9 +41,9 @@ body {
 .live-pill.on { color: var(--sam); border-color: var(--sam); }
 .topbar-right { display: flex; align-items: center; gap: 0.6rem; }
 .layout {
-  display: grid; grid-template-columns: minmax(0, 1fr) 19rem;
+  display: grid; grid-template-columns: minmax(0, 1fr) 21.5rem;
   gap: 1.25rem; padding: 1.25rem 1.5rem 2rem;
-  max-width: 80rem; margin: 0 auto;
+  max-width: 84rem; margin: 0 auto;
 }
 .canvas-card {
   position: relative;
@@ -66,6 +66,8 @@ body {
 }
 .file-btn:hover, .btn:hover { border-color: var(--accent); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:disabled:hover { border-color: #3a4653; }
 .btn.active { outline: 2px solid var(--accent); outline-offset: 1px; }
 #phrase-input {
   flex: 1; min-width: 10rem; font: inherit; font-size: 0.9rem;
@@ -89,13 +91,13 @@ body {
 /* Device pins: identity at a glance, glow only when actually on. */
 .pin {
   position: absolute; z-index: 4; cursor: pointer;
-  width: 2rem; height: 2rem; border-radius: 50%;
+  min-width: 2rem; height: 2rem; border-radius: 999px;
   transform: translate(-50%, -50%);
   display: flex; align-items: center; justify-content: center;
-  font-size: 0.8rem; font-weight: 700;
+  font-size: 0.75rem; font-weight: 700; white-space: nowrap;
   color: var(--text); background: rgba(13, 17, 20, 0.9);
   border: 2px solid var(--muted);
-  padding: 0;
+  padding: 0 0.6rem;
 }
 .pin.manual { border-style: dashed; }
 .pin.bound { border-color: var(--sam); }
@@ -133,7 +135,12 @@ body {
 .ambient .dot.day { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
 .ambient .dot.night { background: #6f9fd8; box-shadow: 0 0 6px #6f9fd8; }
 #selected-info { font-size: 0.9rem; margin-bottom: 0.5rem; min-height: 1.4em; }
-#tap-row { display: flex; gap: 0.4rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
+#bind-row, #tap-row { display: flex; gap: 0.4rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
+#entity-select {
+  flex: 1; min-width: 8rem; font: inherit; font-size: 0.8rem;
+  padding: 0.4rem; border-radius: 6px;
+  border: 1px solid #3a4653; background: #0d1114; color: var(--text);
+}
 .region .tag {
   position: absolute; top: -1.5em; left: -2px;
   font-size: 0.72rem; font-weight: 600; white-space: nowrap;
@@ -180,6 +187,14 @@ body.drawing #photo-wrap { cursor: crosshair; }
 .legend { font-size: 0.75rem; color: var(--muted); margin: 0 0 0.5rem; }
 .legend .swatch { display: inline-block; width: 1.4em; height: 0.7em; border: 2px solid var(--sam); border-radius: 3px; vertical-align: baseline; }
 .legend .swatch.dashed { border-style: dashed; border-color: var(--manual); }
+.pin-key {
+  display: inline-block; font-size: 0.68rem; font-weight: 700;
+  padding: 0.1em 0.6em; border-radius: 999px; margin-left: 0.4em;
+  background: rgba(13, 17, 20, 0.9); color: var(--text); border: 2px solid var(--muted);
+}
+.pin-key.bound { border-color: var(--sam); }
+.pin-key.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.pin-key.selected { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--text); }
 .devices { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
 .devices li {
   display: flex; justify-content: space-between; align-items: center;
@@ -205,6 +220,7 @@ body.drawing #photo-wrap { cursor: crosshair; }
 .plan .muted { color: var(--muted); font-size: 0.78rem; }
 .plan .btn { margin-top: 0.5rem; }
 .sim-tag {
+  margin-left: 0.4rem;
   font-size: 0.68rem; font-weight: 700; vertical-align: middle;
   padding: 0.15em 0.5em; border-radius: 999px;
   border: 1px dashed var(--manual); color: var(--manual);

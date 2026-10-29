@@ -17,6 +17,7 @@
       <span class="ambient-item">Demo room</span>
       <span class="ambient-item"><span id="sun-dot" class="dot"></span><span id="sun-state">—</span></span>
       <span class="ambient-item"><span id="lights-on">—</span></span>
+      <span class="ambient-item"><span id="auto-count">—</span></span>
     </div>
     <div class="topbar-right">
       <button id="reset-btn" class="btn" title="Turn everything off and delete deployed automations">Reset</button>
@@ -39,13 +40,15 @@
       <div id="photo-wrap">
         <img id="photo" alt="Room photo" hidden />
         <div id="regions"></div>
-        <div id="photo-empty">Upload a photo — or use the demo room — to begin.<br />Then tap a device pin to select it.</div>
+        <div id="photo-empty">1 · Upload a photo — or use the demo room — to begin.<br />Then 2 · bind, and 3 · tap a device pin to control it.</div>
       </div>
       <p id="photo-msg"></p>
       <section id="sheet" class="sheet" hidden>
         <button id="sheet-close" class="sheet-close" title="Deselect">×</button>
         <div id="selected-info">Tap a pin in the photo.</div>
-        <div id="tap-row">
+        <div id="bind-row">
+          <select id="entity-select" title="Bind to HA entity"></select>
+          <button id="bind-btn" class="btn">Bind</button>
           <button id="unbind-btn" class="btn">Unbind</button>
         </div>
       </section>
@@ -53,23 +56,23 @@
 
     <aside class="panel">
       <section>
-        <h2>Auto-bind</h2>
-        <button id="suggest-btn" class="btn primary">Suggest bindings</button>
+        <h2>2 · Bind</h2>
+        <button id="suggest-btn" class="btn primary" disabled title="Choose a photo first">Suggest bindings</button>
         <ul id="proposal-list" class="proposals"></ul>
       </section>
-      <details class="fold">
-        <summary>Automate <span class="fold-hint">plan details</span></summary>
+      <section>
+        <h2>4 · Automate</h2>
         <div id="auto-row">
           <select id="source-select" title="Trigger region"></select>
           <span class="arrow">→</span>
           <select id="target-select" title="Action region"></select>
         </div>
         <input id="auto-text" placeholder="Instruction — e.g. after sunset, off after a minute" />
-        <button id="plan-btn" class="btn primary">Generate plan</button>
+        <button id="plan-btn" class="btn primary" disabled title="Bind a region first">Generate plan</button>
         <div id="plan-view"></div>
-      </details>
+      </section>
       <section>
-        <h2>What-If <span class="sim-tag">simulated</span></h2>
+        <h2>5 · What-If <span class="sim-tag">simulated</span></h2>
         <div id="whatif-row">
           <select id="whatif-proposal" title="Automation proposal"></select>
           <select id="whatif-door" title="Simulated door event">
@@ -81,12 +84,13 @@
             <option value="night">simulated night</option>
           </select>
         </div>
-        <button id="whatif-btn" class="btn">Preview</button>
+        <button id="whatif-btn" class="btn" disabled title="Generate a plan first">Preview</button>
         <div id="whatif-view"></div>
       </section>
       <section>
         <h2>Regions</h2>
-        <p class="legend"><span class="swatch"></span> SAM mask &nbsp;<span class="swatch dashed"></span> hand-drawn</p>
+        <p class="legend"><span class="swatch"></span> SAM mask <span class="swatch dashed"></span> hand-drawn
+          <span class="pin-key bound">Bound</span> <span class="pin-key on">ON</span> <span class="pin-key selected">Selected</span></p>
         <ul id="region-list" class="chips"></ul>
       </section>
       <details class="fold">

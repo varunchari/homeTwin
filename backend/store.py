@@ -216,6 +216,18 @@ def delete_binding(photo_id: int, object_id: str) -> bool:
         conn.close()
 
 
+def clear_bindings() -> int:
+    """Delete every binding (fresh-demo reset: the suggest flow must be
+    showable on every run, not just the first). Regions are kept."""
+    conn = connect()
+    try:
+        cur = conn.execute("DELETE FROM bindings")
+        conn.commit()
+        return cur.rowcount
+    finally:
+        conn.close()
+
+
 def save_proposal(photo_id: int, source_id: str, target_id: str, text: str,
                   ir: dict, compiled: dict) -> int:
     import json

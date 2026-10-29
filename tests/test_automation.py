@@ -302,6 +302,10 @@ class ProposeApproveTest(unittest.TestCase):
             f"/api/automations/proposals?photo_id={pid}").json()["proposals"]
         self.assertEqual(listed, [])
         self.assertGreaterEqual(body["history_cleared"], 1)
+        graph = self.client.get(f"/api/photos/{pid}/graph").json()
+        self.assertEqual(graph["bindings"], {})
+        self.assertGreaterEqual(body["bindings_cleared"], 2)
+        self.assertTrue(graph["regions"])
         again = self.client.post("/api/reset").json()
         self.assertEqual(again["automations_cleared"], [])
         SERVICE_CALLS.clear()

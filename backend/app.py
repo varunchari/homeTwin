@@ -873,8 +873,12 @@ async def reset_baseline() -> dict:
     await _ha_service("automation/reload", {})
     # Trial-run cleanup: executed history goes, unapproved drafts stay.
     history_cleared = store_module.delete_proposals(("deployed", "reset"))
+    # Fresh-demo reset: bindings go too, so the suggest flow is showable on
+    # every run. Regions (the segmentation result) are kept.
+    bindings_cleared = store_module.clear_bindings()
     return {"ok": True, "inputs_off": BASELINE_INPUTS, "lights_off": BASELINE_LIGHTS,
-            "automations_cleared": cleared, "history_cleared": history_cleared}
+            "automations_cleared": cleared, "history_cleared": history_cleared,
+            "bindings_cleared": bindings_cleared}
 
 
 @app.delete("/api/photos/{photo_id}/regions/{object_id}")
