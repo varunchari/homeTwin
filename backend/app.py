@@ -527,7 +527,8 @@ MATCH_SYSTEM = (
     "Reply with JSON only, following the schema. Rules: "
     "light-like regions bind only to light.* entities; "
     "door-like regions bind only to binary_sensor.* door entities; "
-    "screens and displays (tv, monitor, smart display) bind to NOTHING; "
+    "screens bind only to the TV / smart display switch entities "
+    "(input_boolean.tv_on, input_boolean.display_on), never to helpers; "
     "decor binds to nothing; "
     "propose ONLY regions marked UNBOUND, and only entities marked free; "
     "use box positions (thirds of the photo) plus the already-bound regions "
@@ -871,8 +872,9 @@ async def reset_baseline() -> dict:
                 store_module.set_proposal_status(p["id"], "reset")
                 cleared.append(automation_id)
     await _ha_service("automation/reload", {})
-    # Trial-run cleanup: executed history goes, unapproved drafts stay.
-    history_cleared = store_module.delete_proposals(("deployed", "reset"))
+    # Full demo reset: history goes too, including unapproved drafts,
+    # so What-If is empty after Reset (updated demo steps).
+    history_cleared = store_module.delete_proposals(("pending", "deployed", "reset"))
     # Fresh-demo reset: bindings go too, so the suggest flow is showable on
     # every run. Regions (the segmentation result) are kept.
     bindings_cleared = store_module.clear_bindings()

@@ -481,6 +481,7 @@ document.getElementById("reset-btn").addEventListener("click", async () => {
   // stale automation, plan, or preview survives on screen.
   planView.innerHTML = "";
   whatifView.innerHTML = "";
+  proposalList.innerHTML = "";
   deselect();
   await load();
   if (photoId) { await refreshGraph(); await refreshProposals(); }
