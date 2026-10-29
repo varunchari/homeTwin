@@ -277,8 +277,11 @@ document.getElementById("plan-btn").addEventListener("click", async () => {
     const r2 = await fetch(`/api/automations/${body.proposal_id}/approve`, { method: "POST" });
     const b2 = await r2.json();
     if (r2.ok) {
-      btn.textContent = `Deployed ${b2.automation_id}`;
-      say(`Deployed ${b2.automation_id}.`);
+      const label = b2.already && b2.proposal_id
+        ? `Already deployed (plan #${b2.proposal_id})`
+        : `Deployed ${b2.automation_id}`;
+      btn.textContent = label;
+      say(`${label}.`);
       await refreshProposals();
     } else {
       btn.disabled = false;
