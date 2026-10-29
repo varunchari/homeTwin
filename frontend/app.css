@@ -39,6 +39,7 @@ body {
   border: 1px solid #2a343e;
 }
 .live-pill.on { color: var(--sam); border-color: var(--sam); }
+.topbar-right { display: flex; align-items: center; gap: 0.6rem; }
 .layout {
   display: grid; grid-template-columns: minmax(0, 1fr) 19rem;
   gap: 1.25rem; padding: 1.25rem 1.5rem 2rem;
