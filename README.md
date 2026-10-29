@@ -8,7 +8,7 @@ Built Oct 27–Nov 4, 2026 for the Meta Global AI Developer Hackathon (Cerebral 
 
 - Live demo (HTTP for now): http://3.135.147.231/ — an HTTPS domain will be added before submission; Caddy already terminates 80/443, so this is a domain + DNS change, not a re-architecture.
 - Honest scope: real Home Assistant engine, virtual devices for this demo. Physical rollout swaps entity IDs; the API, compiler and UI stay the same. Six fixtures: Floor lamp, String lights, Reading light, Patio door, TV and Smart display (as switches).
-- The implementation plan is an internal working document and is deliberately not kept in this repo. Shipped behaviour is documented here and in `docs/evidence-log.md`.
+- `docs/implementation-plan.md` is kept in the repo for now for collaboration and brainstorming. It will be deleted before the final submission — shipped behaviour is documented here and in `docs/evidence-log.md`.
 
 ## Layout
 
@@ -16,7 +16,7 @@ Built Oct 27–Nov 4, 2026 for the Meta Global AI Developer Hackathon (Cerebral 
 - `frontend/` — static views. State comes only from HA WebSocket events. No optimistic UI.
 - `ha/` — Home Assistant Core config (Docker). Real engine, virtual devices for this demo.
 - `assets/demo-room/` — generated dummy room (rights-clean). See its README for fixtures and SAM prompts.
-- `docs/` — evidence log, version records.
+- `docs/` — implementation plan (collaboration draft, removed before submission), evidence log, version records.
 - `scripts/` — day exit-test runners.
 
 ## Automation patterns (one compiler, three templates)
