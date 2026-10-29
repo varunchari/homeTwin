@@ -405,9 +405,14 @@ BASELINE_INPUTS = [
     "input_boolean.string_lights_on",
     "input_boolean.reading_light_on",
     "input_boolean.patio_door_open",
+    "input_boolean.tv_on",
+    "input_boolean.display_on",
 ]
 BASELINE_LIGHTS = ["light.floor_lamp", "light.string_lights", "light.reading_light"]
-BINDABLE_DOMAINS = ("light", "binary_sensor")
+BINDABLE_DOMAINS = ("light", "binary_sensor", "input_boolean")
+# Only these input_booleans are bindable screens/switches. The lamp/door
+# helpers back template entities and must never surface as bind targets.
+BINDABLE_INPUTS = ("input_boolean.tv_on", "input_boolean.display_on")
 
 
 async def _ha_states() -> list[dict]:
@@ -457,6 +462,12 @@ async def bind_region(photo_id: int, req: BindingRequest) -> dict:
             status_code=422,
             detail=f"Only {', '.join(BINDABLE_DOMAINS)}.* entities can be bound (Day 3 baseline)",
         )
+    if domain == "input_boolean" and req.entity_id not in BINDABLE_INPUTS:
+        raise HTTPException(
+            status_code=422,
+            detail="Only the TV and smart display switches can be bound, "
+                   "not internal helper inputs.",
+        )
     known = {s.get("entity_id") for s in await _ha_states()}
     if req.entity_id not in known:
         raise HTTPException(status_code=422, detail="unknown HA entity")
@@ -484,6 +495,9 @@ async def tap_region(photo_id: int, req: TapRequest) -> dict:
     domain, _, _ = entity_id.partition(".")
     if domain == "light":
         await _ha_service("light/toggle", {"entity_id": entity_id})
+        action = "toggle"
+    elif domain == "input_boolean":
+        await _ha_service("input_boolean/toggle", {"entity_id": entity_id})
         action = "toggle"
     elif entity_id in VIRTUAL_TAP_INPUTS:
         await _ha_service("input_boolean/toggle",
@@ -572,12 +586,19 @@ async def suggest_bindings(photo_id: int) -> dict:
                 "note": "everything already bound"}
     states = await _ha_states()
     entity_bound = {e: o for o, e in bound.items()}
+
+    def _suggestable(entity_id: str) -> bool:
+        domain, _, _ = entity_id.partition(".")
+        if domain in ("light", "binary_sensor"):
+            return True
+        return entity_id in BINDABLE_INPUTS
+
     entities = [
         {"entity_id": s.get("entity_id"),
          "name": (s.get("attributes") or {}).get("friendly_name", s.get("entity_id")),
          "state": s.get("state")}
         for s in states
-        if s.get("entity_id", "").split(".")[0] in BINDABLE_DOMAINS
+        if _suggestable(s.get("entity_id", ""))
     ]
 
     def _describe_region(r: dict) -> str:
@@ -803,12 +824,41 @@ async def what_if(req: WhatIfRequest) -> dict:
 
 @app.post("/api/reset")
 async def reset_baseline() -> dict:
-    """One-click return to the frozen baseline: every demo input off, every light off."""
+    """One-click return to the frozen baseline: every demo input off, every
+    light off, and every deployed hometwin_* automation deleted, so the next
+    trial run starts from a clean slate (per-approval deploys never linger)."""
+    import store as store_module
+
     for entity_id in BASELINE_INPUTS:
         await _ha_service("input_boolean/turn_off", {"entity_id": entity_id})
     for entity_id in BASELINE_LIGHTS:
         await _ha_service("light/turn_off", {"entity_id": entity_id})
-    return {"ok": True, "inputs_off": BASELINE_INPUTS, "lights_off": BASELINE_LIGHTS}
+    cleared = []
+    async with httpx.AsyncClient(timeout=15) as client:
+        for p in store_module.list_proposals():
+            if p["status"] != "deployed":
+                continue
+            automation_id = f"hometwin_{p['id']}"
+            # HA answers 400 (not 404) when deleting a missing id, so check
+            # existence first: missing means an earlier reset already cleared
+            # it — just fix the stale record.
+            get = await client.get(
+                f"{HA_URL}/api/config/automation/config/{automation_id}",
+                headers=_headers())
+            if get.status_code == 404:
+                store_module.set_proposal_status(p["id"], "reset")
+                continue
+            if get.status_code != 200:
+                continue
+            resp = await client.delete(
+                f"{HA_URL}/api/config/automation/config/{automation_id}",
+                headers=_headers())
+            if resp.status_code == 200:
+                store_module.set_proposal_status(p["id"], "reset")
+                cleared.append(automation_id)
+    await _ha_service("automation/reload", {})
+    return {"ok": True, "inputs_off": BASELINE_INPUTS, "lights_off": BASELINE_LIGHTS,
+            "automations_cleared": cleared}
 
 
 @app.delete("/api/photos/{photo_id}/regions/{object_id}")

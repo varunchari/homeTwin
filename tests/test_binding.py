@@ -157,7 +157,7 @@ class TapTest(unittest.TestCase):
         r = self.client.post("/api/reset")
         self.assertEqual(r.status_code, 200)
         services = [s for s, _ in SERVICE_CALLS]
-        self.assertEqual(services.count("input_boolean/turn_off"), 4)
+        self.assertEqual(services.count("input_boolean/turn_off"), 6)
         self.assertEqual(services.count("light/turn_off"), 3)
 
 

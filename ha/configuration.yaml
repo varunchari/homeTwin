@@ -35,6 +35,12 @@ input_boolean:
   patio_door_open:
     name: Patio door input
     initial: off
+  tv_on:
+    name: TV power
+    initial: off
+  display_on:
+    name: Smart display power
+    initial: off
   # Blind is optional, only if free:
   # blind_open:
   #   name: Blind input

@@ -7,9 +7,11 @@ const states = new Map();
 function render() {
   listEl.innerHTML = "";
   for (const [id, st] of states) {
+    if (id.startsWith("input_boolean.")) continue; // helpers back templates; not devices
     const li = document.createElement("li");
     const name = document.createElement("span");
-    name.textContent = id;
+    name.textContent = prettyEntity(id);
+    name.title = id;
     const dot = document.createElement("span");
     dot.className = "dot" + (st === "on" ? " on" : "");
     dot.title = st;
@@ -35,6 +37,7 @@ function render() {
 async function load() {
   const res = await fetch("/api/entities");
   const entities = await res.json();
+  noteNames(entities);
   for (const e of entities) states.set(e.entity_id, e.state);
   render();
   await refreshEntities();
@@ -107,6 +110,17 @@ function renderRegions(regions) {
     box.appendChild(tag);
     if (bindings[r.object_id]) box.classList.add("bound");
     regionsEl.appendChild(box);
+    // Screens (TV, smart display) light up when their switch is on.
+    if (/tv|display|screen/i.test(`${r.object_id} ${r.phrase}`)) {
+      const screen = document.createElement("div");
+      screen.className = "screen";
+      screen.dataset.oid = r.object_id;
+      screen.style.left = `${r.x * 100}%`;
+      screen.style.top = `${r.y * 100}%`;
+      screen.style.width = `${r.w * 100}%`;
+      screen.style.height = `${r.h * 100}%`;
+      regionsEl.appendChild(screen);
+    }
     // Device pin: the everyday face. Boxes appear only when selected/drawing.
     const pin = document.createElement("button");
     pin.className = "pin" + (r.source === "manual" ? " manual" : "");
@@ -144,6 +158,10 @@ function updatePins() {
   for (const box of regionsEl.querySelectorAll(".box")) {
     box.classList.toggle("selected", box.dataset.oid === selectedId);
   }
+  for (const screen of regionsEl.querySelectorAll(".screen")) {
+    const entity = bindings[screen.dataset.oid];
+    screen.classList.toggle("on", !!entity && states.get(entity) === "on");
+  }
 }
 
 async function refreshGraph() {
@@ -174,7 +192,9 @@ photoEl.addEventListener("click", () => { if (!drawing) deselect(); });
 function showSelected(objectId) {
   const info = document.getElementById("selected-info");
   const bound = bindings[objectId];
-  info.textContent = bound ? `${objectId} → ${bound}` : `${objectId} (unbound)`;
+  info.textContent = bound
+    ? `${prettyOid(objectId)} → ${prettyEntity(bound)}`
+    : `${prettyOid(objectId)} (unbound)`;
 }
 
 const sourceSelect = document.getElementById("source-select");
@@ -188,7 +208,7 @@ function refreshAutoSelects(boundIds) {
     for (const id of boundIds) {
       const opt = document.createElement("option");
       opt.value = id;
-      opt.textContent = `${id} → ${bindings[id]}`;
+      opt.textContent = `${prettyOid(id)} → ${prettyEntity(bindings[id])}`;
       sel.appendChild(opt);
     }
     if (boundIds.includes(keep)) sel.value = keep;
@@ -224,7 +244,7 @@ document.getElementById("plan-btn").addEventListener("click", async () => {
   const cond = ir.condition ? ` when sun ${ir.condition.sun.replace("_", " ")}` : "";
   const delay = ir.delay_s ? `, off after ${ir.delay_s}s` : "";
   div.innerHTML = `<strong>${ir.description || "Automation plan"}</strong>` +
-    `<br />${ir.trigger.entity_id} → ${ir.action.entity_id}${cond}${delay}` +
+    `<br />${prettyEntity(ir.trigger.entity_id)} → ${prettyEntity(ir.action.entity_id)}${cond}${delay}` +
     `<br /><span class="muted">Compiled ${body.compiled.trigger.length} trigger(s), ` +
     `${body.compiled.action.length} action step(s) in ${body.latency_ms} ms. ` +
     `Approval required before deploy.</span>`;
@@ -258,7 +278,7 @@ async function refreshProposals() {
   for (const p of body.proposals) {
     const opt = document.createElement("option");
     opt.value = p.id;
-    opt.textContent = `#${p.id} ${p.summary} [${p.status}]`;
+    opt.textContent = `#${p.id} ${prettyOid(p.source_id)} → ${prettyOid(p.target_id)} [${p.status}]`;
     whatifProposal.appendChild(opt);
   }
   if ([...whatifProposal.options].some((o) => o.value === keep)) whatifProposal.value = keep;
@@ -299,16 +319,36 @@ async function tapSelected() {
 }
 
 const entitySelect = document.getElementById("entity-select");
+// Friendly display names everywhere: HA entity_ids never surface in the UI.
+// Values stay entity_ids; only labels are humanized.
+const names = new Map();
+function prettyEntity(id) {
+  if (names.has(id)) return names.get(id);
+  return id.split(".").slice(1).join(" ").replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+function prettyOid(oid) {
+  return oid.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+function noteNames(entities) {
+  for (const e of entities) {
+    const friendly = (e.attributes || {}).friendly_name;
+    if (friendly) names.set(e.entity_id, friendly);
+  }
+}
+const BINDABLE_INPUTS = ["input_boolean.tv_on", "input_boolean.display_on"];
 async function refreshEntities() {
   const res = await fetch("/api/entities");
   const entities = await res.json();
+  noteNames(entities);
   entitySelect.innerHTML = "";
   for (const e of entities) {
     const domain = e.entity_id.split(".")[0];
-    if (domain !== "light" && domain !== "binary_sensor") continue;
+    if (domain !== "light" && domain !== "binary_sensor" &&
+        !BINDABLE_INPUTS.includes(e.entity_id)) continue;
     const opt = document.createElement("option");
     opt.value = e.entity_id;
-    opt.textContent = `${e.entity_id} (${e.state})`;
+    opt.textContent = `${prettyEntity(e.entity_id)} (${e.state})`;
     entitySelect.appendChild(opt);
   }
 }
@@ -321,7 +361,7 @@ document.getElementById("bind-btn").addEventListener("click", async () => {
     body: JSON.stringify({ object_id: selectedId, entity_id: entitySelect.value }),
   });
   const body = await res.json();
-  say(res.ok ? `Bound ${selectedId} → ${entitySelect.value}.` : `Bind failed: ${body.detail || res.status}`);
+  say(res.ok ? `Bound ${prettyOid(selectedId)} → ${prettyEntity(entitySelect.value)}.` : `Bind failed: ${body.detail || res.status}`);
   await refreshGraph();
 });
 
@@ -357,7 +397,7 @@ document.getElementById("suggest-btn").addEventListener("click", async () => {
   say(`${body.proposals.length} suggestion(s). Approve each, or all at once.`);
   for (const p of body.proposals) {
     const li = document.createElement("li");
-    li.textContent = `${p.object_id} → ${p.entity_id} (${Math.round(p.confidence * 100)}%): ${p.reason}${p.conflict ? " [CONFLICT]" : ""}`;
+    li.textContent = `${prettyOid(p.object_id)} → ${prettyEntity(p.entity_id)} (${Math.round(p.confidence * 100)}%): ${p.reason}${p.conflict ? " [CONFLICT]" : ""}`;
     const btn = document.createElement("button");
     btn.className = "btn";
     btn.textContent = "Approve";

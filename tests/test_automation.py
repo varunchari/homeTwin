@@ -87,6 +87,10 @@ class CompileTest(unittest.TestCase):
 HA_STATES = [
     {"entity_id": "binary_sensor.patio_door", "state": "off", "attributes": {}},
     {"entity_id": "light.floor_lamp", "state": "off", "attributes": {}},
+    {"entity_id": "input_boolean.tv_on", "state": "off",
+     "attributes": {"friendly_name": "TV power"}},
+    {"entity_id": "input_boolean.lamp_floor_on", "state": "off",
+     "attributes": {"friendly_name": "Floor lamp input"}},
 ]
 DEPLOYED: dict[str, dict] = {}
 
@@ -128,6 +132,14 @@ class FakeAsyncClient:
         aid = url.rsplit("/", 1)[-1]
         DEPLOYED[aid] = json or {}
         return FakeResp(200, {})
+
+    async def delete(self, url, headers=None):
+        aid = url.rsplit("/", 1)[-1]
+        SERVICE_CALLS.append(f"delete:{aid}")
+        if aid in DEPLOYED:
+            del DEPLOYED[aid]
+            return FakeResp(200, {})
+        return FakeResp(404, {})
 
 
 SPARK_IR = valid_ir()
@@ -274,6 +286,42 @@ class ProposeApproveTest(unittest.TestCase):
             self.assertEqual(len(after), len(before))
         finally:
             spark_client.complete_json = fake_complete
+
+    def test_reset_deletes_deployed_rules(self):
+        pid = make_bound_photo(self.client, w=748)
+        prop = self.client.post("/api/automations/propose",
+                                json={"photo_id": pid, "source_object_id": "door",
+                                      "target_object_id": "lamp", "text": ""}).json()
+        self.client.post(f"/api/automations/{prop['proposal_id']}/approve")
+        aid = f"hometwin_{prop['proposal_id']}"
+        self.assertIn(aid, DEPLOYED)
+        body = self.client.post("/api/reset").json()
+        self.assertIn(aid, body["automations_cleared"])
+        self.assertNotIn(aid, DEPLOYED)
+        listed = self.client.get(
+            f"/api/automations/proposals?photo_id={pid}").json()["proposals"]
+        self.assertEqual(listed[0]["status"], "reset")
+        again = self.client.post("/api/reset").json()
+        self.assertEqual(again["automations_cleared"], [])
+        SERVICE_CALLS.clear()
+
+    def test_tap_toggles_bindable_switch_and_rejects_helpers(self):
+        pid = make_bound_photo(self.client, w=764)
+        self.client.post(f"/api/photos/{pid}/regions",
+                         json={"label": "tv", "x": 0.5, "y": 0.5, "w": 0.2, "h": 0.2})
+        r = self.client.post(f"/api/photos/{pid}/bindings",
+                             json={"object_id": "tv",
+                                   "entity_id": "input_boolean.lamp_floor_on"})
+        self.assertEqual(r.status_code, 422)
+        r = self.client.post(f"/api/photos/{pid}/bindings",
+                             json={"object_id": "tv",
+                                   "entity_id": "input_boolean.tv_on"})
+        self.assertTrue(r.json()["ok"])
+        body = self.client.post(f"/api/photos/{pid}/tap",
+                                json={"object_id": "tv"}).json()
+        self.assertEqual(body["action"], "toggle")
+        self.assertIn("input_boolean/toggle", SERVICE_CALLS)
+        SERVICE_CALLS.clear()
 
     def test_proposals_filtered_by_photo(self):
         pid_a = make_bound_photo(self.client, w=700)
