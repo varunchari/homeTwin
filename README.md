@@ -40,6 +40,20 @@ Both are honest about their limits, and the UI says so on every preview:
 - Apply is a separate, approval-gated step, and it only ever calls supported `light.turn_on` / `light.turn_off` actions, validated against the live HA registry first.
 - Time-of-day presets are deterministic, not model output: Morning = all lights off, Sunset = string lights + reading light on, Night = reading light on only.
 
+## Voice
+
+Push-to-talk only: hold the Voice button, release to transcribe. The transcript is always shown on screen, and voice is never the only path — the typed Automate box still works.
+
+- Automation transcripts fill the Automate box (and its source/target dropdowns, from the bound entities). The user still clicks Generate plan, then approves before any HA write — voice is a second input to the exact same Spark → validator → approval → deploy pipeline as typed input.
+- The tap-control transcript shows an explicit button to turn the reading light on. Clicking it is the action, the same live tap as tapping a pin.
+- Only 4 utterances are supported, and anything else gets "not supported yet" and is never executed:
+  1. "Turn the reading light on" (tap-control)
+  2. "When the door opens, turn the reading light on" (pattern 1)
+  3. "When the door opens after sunset, turn the string lights on" (pattern 2)
+  4. "When the door opens, turn the reading light on, off after a minute" (pattern 3)
+- No spoken replies: Voice Transcribe is speech-to-text only. Audio is sent once for transcription and is not stored; only the transcript text is logged for evidence.
+- Integration freeze from here: no new models, SDKs, or services after voice, except the already-planned stretch items if time remains.
+
 ## Why dropdowns, not draw-an-arrow, for automation
 
 You are right: dropdowns are the better UX here, and more controlled. Automate uses two dropdowns (trigger region → action region) limited to bound regions only, plus an instruction box and the delay/model dropdowns above. A drawn arrow would have to be parsed into source, target and intent — ambiguous at the edges, fragile under a slightly off drag, and hard to validate before the model runs. Dropdowns make the choice explicit, auditable and re-runnable, which is what a demo and a judge need.
