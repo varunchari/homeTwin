@@ -23,9 +23,22 @@ Built Oct 27–Nov 4, 2026 for the Meta Global AI Developer Hackathon (Cerebral 
 
 1. State → action: door opens → light on.
 2. State + condition → action: door opens after sunset → light on.
-3. State → action + delay: door opens → light on, off after a delay. The Automate panel has an explicit delay dropdown (none / 1 minute for live testing / 5 minutes); a selected delay deterministically overrides anything the model inferred from text, so this beat does not depend on Spark parsing "off after a minute". Live delay beat to run after a rebuild: Patio Door → Reading Light, auto-off 1 minute, Generate → Approve → open the door (light on) → after 60 s the light turns off, via WebSocket state changes.
+3. State → action + delay: door opens → light on, off after a delay. The Automate panel has an explicit delay dropdown (none / 1 minute for live testing / 5 minutes); a selected delay deterministically overrides anything the model inferred from text, so this beat does not depend on Spark parsing "off after a minute". **Status: NOT tested live yet** — compiled and unit-tested only. Live delay beat still to run: Patio Door → Reading Light, auto-off 1 minute, Generate → Approve → open the door (light on) → after 60 s the light turns off by itself, via WebSocket state changes, with no manual tap to turn it off.
 
 Approval is required before every HA write. Only the patio door may trigger, only lights may be acted on, and only the sun condition is allowed — no locks, alarms, covers or arbitrary YAML, ever.
+
+## Design Advisor and time of day
+
+Design Advisor: type a request (default "cozy evening") → Muse Spark proposes exactly 2 feasible lighting settings → pick one, preview it with Muse Image, then approve to apply it in Home Assistant. Declining changes nothing.
+
+Time of day: pick Morning, Sunset, or Night → Muse Image edits the room photo into an illustrative variant → apply the matching preset lights, or don't.
+
+Both are honest about their limits, and the UI says so on every preview:
+
+- Settings are only the home's real lights, on or off only — the template lights have no brightness or colour, so none is invented. Relocation stays a suggestion in prose, never an HA action.
+- Every preview is labelled illustrative: a mood preview, never a photometrically accurate simulation, and never a promise the room will look exactly like the picture.
+- Apply is a separate, approval-gated step, and it only ever calls supported `light.turn_on` / `light.turn_off` actions, validated against the live HA registry first.
+- Time-of-day presets are deterministic, not model output: Morning = all lights off, Sunset = string lights + reading light on, Night = reading light on only.
 
 ## Why dropdowns, not draw-an-arrow, for automation
 
