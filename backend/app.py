@@ -1023,8 +1023,15 @@ async def time_of_day_preview(req: TimeOfDayRequest) -> dict:
     if req.variant not in TIME_OF_DAY_PRESETS:
         raise HTTPException(status_code=422,
                             detail="variant must be morning, sunset, or night")
+    from advisor import TIME_OF_DAY_PRESETS, validate_settings
+
     _photo, raw = _photo_bytes(req.photo_id)
     preset = TIME_OF_DAY_PRESETS[req.variant]
+    registry = {s.get("entity_id") for s in await _ha_states()}
+    reasons = validate_settings([{"name": preset["label"], "description": "",
+                                  "actions": preset["actions"]}], registry)
+    if reasons:
+        raise HTTPException(status_code=422, detail="; ".join(reasons))
     t0 = time.monotonic()
     try:
         image_bytes = await edit_image(raw, preset["image_prompt"])

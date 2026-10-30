@@ -254,6 +254,24 @@ class AdvisorEndpointTest(unittest.TestCase):
                              json={"photo_id": pid, "variant": "dawn"})
         self.assertEqual(r.status_code, 422)
 
+    def test_time_of_day_validates_preset_before_image_spend(self):
+        async def exploding_edit(image_bytes, prompt):
+            raise AssertionError("image must not be called for an invalid preset")
+
+        pid = make_photo(self.client)
+        saved_states = list(HA_STATES)
+        del HA_STATES[1]  # string_lights missing: sunset preset cannot apply
+        saved_edit = image_client.edit_image
+        image_client.edit_image = exploding_edit
+        try:
+            r = self.client.post("/api/advisor/time-of-day",
+                                 json={"photo_id": pid, "variant": "sunset"})
+            self.assertEqual(r.status_code, 422)
+            self.assertIn("string_lights", r.json()["detail"])
+        finally:
+            HA_STATES[:] = saved_states
+            image_client.edit_image = saved_edit
+
 
 if __name__ == "__main__":
     unittest.main()
