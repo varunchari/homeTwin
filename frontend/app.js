@@ -304,9 +304,10 @@ document.getElementById("plan-btn").addEventListener("click", async () => {
     const r2 = await fetch(`/api/automations/${body.proposal_id}/approve`, { method: "POST" });
     const b2 = await r2.json();
     if (r2.ok) {
+      const via = body.provider === "open" ? ` via open-weight (${body.model})` : "";
       const label = b2.already && b2.proposal_id
-        ? `Already deployed (plan #${b2.proposal_id})`
-        : `Deployed ${b2.automation_id}`;
+        ? `Already deployed (plan #${b2.proposal_id})${via}`
+        : `Deployed ${b2.automation_id}${via}`;
       btn.textContent = label;
       say(`${label}.`);
       await refreshProposals();
