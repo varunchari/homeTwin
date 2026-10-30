@@ -868,6 +868,203 @@ async def what_if(req: WhatIfRequest) -> dict:
             "action": compiled["action"] if fires else []}
 
 
+# --- Design Advisor + time-of-day previews (illustrative only) ---
+
+def _preview_media_type(image_bytes: bytes) -> tuple[str, str]:
+    if image_bytes.startswith(b"\x89PNG"):
+        return "image/png", "png"
+    if image_bytes.startswith(b"\xff\xd8"):
+        return "image/jpeg", "jpg"
+    if image_bytes.startswith(b"RIFF") and b"WEBP" in image_bytes[:16]:
+        return "image/webp", "webp"
+    return "image/png", "png"
+
+
+def _save_preview(image_bytes: bytes) -> str:
+    import uuid
+
+    previews_dir = DATA_DIR / "advisor_previews"
+    previews_dir.mkdir(parents=True, exist_ok=True)
+    name = uuid.uuid4().hex
+    (previews_dir / name).write_bytes(image_bytes)
+    return name
+
+
+def _log_image_call(kind: str, latency_ms: int, model: str) -> None:
+    import json
+    import time
+
+    with open(DATA_DIR / "image_calls.jsonl", "a") as f:
+        f.write(json.dumps({"ts": time.time(), "model": model, "kind": kind,
+                            "latency_ms": latency_ms}) + "\n")
+
+
+class AdvisorSuggestRequest(BaseModel):
+    photo_id: int
+    request_text: str = "cozy evening"
+
+
+class AdvisorSettingAction(BaseModel):
+    entity_id: str
+    service: str
+
+
+class AdvisorSetting(BaseModel):
+    name: str
+    description: str = ""
+    actions: list[AdvisorSettingAction]
+
+
+class AdvisorPreviewRequest(BaseModel):
+    photo_id: int
+    setting: AdvisorSetting
+    request_text: str = "cozy evening"
+
+
+class AdvisorApplyRequest(BaseModel):
+    setting: AdvisorSetting
+
+
+class TimeOfDayRequest(BaseModel):
+    photo_id: int
+    variant: str
+
+
+@app.post("/api/advisor/suggest")
+async def advisor_suggest(req: AdvisorSuggestRequest) -> dict:
+    """Spark proposes exactly 2 feasible lighting settings. No HA write,
+    no image yet — preview and apply are separate, approval-gated steps."""
+    import time
+    from advisor import (ADVISOR_SCHEMA, ADVISOR_SYSTEM,
+                         build_advisor_prompt, validate_advisor_response)
+    from spark_client import SPARK_MODEL, SparkError, complete_json
+
+    if not get_photo(req.photo_id):
+        raise HTTPException(status_code=404, detail="unknown photo")
+    registry = {s.get("entity_id") for s in await _ha_states()}
+    lights = sorted(e for e in registry if e.startswith("light."))
+    if not lights:
+        raise HTTPException(status_code=502, detail="no lights found in HA")
+    t0 = time.monotonic()
+    try:
+        out = await complete_json(
+            ADVISOR_SYSTEM, build_advisor_prompt(lights, req.request_text),
+            ADVISOR_SCHEMA)
+    except SparkError as e:
+        raise HTTPException(status_code=502, detail=f"Spark failed: {e}")
+    latency_ms = int((time.monotonic() - t0) * 1000)
+    settings = out.get("settings")
+    reasons = validate_advisor_response(settings, registry)
+    if reasons:
+        raise HTTPException(status_code=422, detail="; ".join(reasons))
+    _spark_log(req.photo_id, latency_ms, 0, "advisor", settings,
+                 model=SPARK_MODEL, provider="hosted")
+    return {"settings": settings, "latency_ms": latency_ms,
+            "model": SPARK_MODEL, "approval_required": True}
+
+
+@app.post("/api/advisor/preview")
+async def advisor_preview(req: AdvisorPreviewRequest) -> dict:
+    """Illustrative Muse Image preview for one chosen setting. No HA write."""
+    import time
+    from advisor import advisor_preview_prompt, validate_settings
+    from image_client import IMAGE_MODEL, ImageError, generate_image
+
+    if not get_photo(req.photo_id):
+        raise HTTPException(status_code=404, detail="unknown photo")
+    registry = {s.get("entity_id") for s in await _ha_states()}
+    setting = req.setting.model_dump()
+    reasons = validate_settings([setting], registry)
+    if reasons:
+        raise HTTPException(status_code=422, detail="; ".join(reasons))
+    t0 = time.monotonic()
+    try:
+        image_bytes = await generate_image(advisor_preview_prompt(setting))
+    except ImageError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    latency_ms = int((time.monotonic() - t0) * 1000)
+    name = _save_preview(image_bytes)
+    media_type, _ext = _preview_media_type(image_bytes)
+    _log_image_call("advisor", latency_ms, IMAGE_MODEL)
+    return {"preview_url": f"/api/advisor/previews/{name}",
+            "media_type": media_type, "setting": setting,
+            "latency_ms": latency_ms, "model": IMAGE_MODEL,
+            "illustrative": True}
+
+
+@app.post("/api/advisor/apply")
+async def advisor_apply(req: AdvisorApplyRequest) -> dict:
+    """Apply one validated setting: supported light on/off only, via HA."""
+    from advisor import validate_settings
+
+    registry = {s.get("entity_id") for s in await _ha_states()}
+    setting = req.setting.model_dump()
+    reasons = validate_settings([setting], registry)
+    if reasons:
+        raise HTTPException(status_code=422, detail="; ".join(reasons))
+    applied = []
+    for action in setting["actions"]:
+        # _ha_service takes "light/turn_on" style names.
+        ha_service = action["service"].replace(".", "/", 1)
+        await _ha_service(ha_service, {"entity_id": action["entity_id"]})
+        applied.append(action)
+    return {"ok": True, "setting": setting["name"], "applied": applied}
+
+
+@app.post("/api/advisor/time-of-day")
+async def time_of_day_preview(req: TimeOfDayRequest) -> dict:
+    """Illustrative variant of the frozen room, edited from its photo.
+    Returns the preset matching settings too; applying them is a
+    separate approval-gated call to /api/advisor/apply."""
+    import time
+    from advisor import TIME_OF_DAY_PRESETS
+    from image_client import IMAGE_MODEL, ImageError, edit_image
+
+    if req.variant not in TIME_OF_DAY_PRESETS:
+        raise HTTPException(status_code=422,
+                            detail="variant must be morning, sunset, or night")
+    from advisor import TIME_OF_DAY_PRESETS, validate_settings
+
+    _photo, raw = _photo_bytes(req.photo_id)
+    preset = TIME_OF_DAY_PRESETS[req.variant]
+    registry = {s.get("entity_id") for s in await _ha_states()}
+    reasons = validate_settings([{"name": preset["label"], "description": "",
+                                  "actions": preset["actions"]}], registry)
+    if reasons:
+        raise HTTPException(status_code=422, detail="; ".join(reasons))
+    t0 = time.monotonic()
+    try:
+        image_bytes = await edit_image(raw, preset["image_prompt"])
+    except ImageError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    latency_ms = int((time.monotonic() - t0) * 1000)
+    name = _save_preview(image_bytes)
+    media_type, _ext = _preview_media_type(image_bytes)
+    _log_image_call(f"time-of-day:{req.variant}", latency_ms, IMAGE_MODEL)
+    return {"variant": req.variant, "label": preset["label"],
+            "description": preset["description"],
+            "preview_url": f"/api/advisor/previews/{name}",
+            "media_type": media_type,
+            "setting": {"name": preset["label"],
+                        "description": preset["description"],
+                        "actions": preset["actions"]},
+            "latency_ms": latency_ms, "model": IMAGE_MODEL,
+            "illustrative": True}
+
+
+@app.get("/api/advisor/previews/{name}")
+async def advisor_preview_image(name: str) -> FileResponse:
+    import re
+
+    if not re.fullmatch(r"[0-9a-f]{32}", name or ""):
+        raise HTTPException(status_code=404, detail="unknown preview")
+    path = DATA_DIR / "advisor_previews" / name
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="unknown preview")
+    media_type, _ext = _preview_media_type(path.read_bytes())
+    return FileResponse(str(path), media_type=media_type)
+
+
 @app.post("/api/reset")
 async def reset_baseline() -> dict:
     """One-click return to the frozen baseline: every demo input off, every

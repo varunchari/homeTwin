@@ -100,6 +100,26 @@
         <div id="whatif-view"></div>
       </section>
       <section>
+        <h2>6 · Design Advisor</h2>
+        <input id="advisor-text" placeholder="Request — e.g. cozy evening" value="cozy evening" />
+        <button id="advisor-btn" class="btn primary">Suggest settings</button>
+        <div id="advisor-view"></div>
+        <div id="advisor-preview-wrap" hidden>
+          <img id="advisor-preview" alt="Illustrative advisor preview" />
+          <p class="muted">Illustrative preview — not a calibrated simulation, not photometrically accurate. Approving a setting applies only supported light on/off actions in Home Assistant.</p>
+        </div>
+        <h3>Time of day</h3>
+        <div id="tod-row">
+          <select id="tod-variant" title="Time-of-day variant">
+            <option value="morning">Morning</option>
+            <option value="sunset">Sunset</option>
+            <option value="night">Night</option>
+          </select>
+          <button id="tod-btn" class="btn">Preview time of day</button>
+        </div>
+        <div id="tod-view"></div>
+      </section>
+      <section>
         <h2>Regions</h2>
         <p class="legend"><span class="swatch"></span> SAM mask <span class="swatch dashed"></span> hand-drawn
           <span class="pin-key bound">Bound</span> <span class="pin-key on">ON</span> <span class="pin-key selected">Selected</span></p>

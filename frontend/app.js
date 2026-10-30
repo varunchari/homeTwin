@@ -508,6 +508,9 @@ document.getElementById("reset-btn").addEventListener("click", async () => {
   planView.innerHTML = "";
   whatifView.innerHTML = "";
   proposalList.innerHTML = "";
+  if (typeof advisorView !== "undefined" && advisorView) advisorView.innerHTML = "";
+  if (typeof todView !== "undefined" && todView) todView.innerHTML = "";
+  if (typeof advisorPreviewWrap !== "undefined" && advisorPreviewWrap) advisorPreviewWrap.hidden = true;
   autoText.value = "";
   whatifDoor.value = "on";
   whatifSun.value = "day";
@@ -625,6 +628,137 @@ photoWrap.addEventListener("pointerup", async (ev) => {
   const body = await res.json();
   say(`Manual region saved as ${body.object_id}.`);
   await refreshGraph();
+});
+
+// Design Advisor + time-of-day previews. Suggestions never write to HA:
+// Preview shows an illustrative image, Apply is the only HA write, and
+// Decline (clearing the panel) changes nothing.
+const advisorView = document.getElementById("advisor-view");
+const advisorPreviewWrap = document.getElementById("advisor-preview-wrap");
+const advisorPreview = document.getElementById("advisor-preview");
+const todView = document.getElementById("tod-view");
+function advisorActionsText(setting) {
+  return (setting.actions || []).map((a) =>
+    `${prettyEntity(a.entity_id)} ${a.service === "light.turn_on" ? "on" : "off"}`).join(", ");
+}
+function advisorApplyButton(setting, label) {
+  const btn = document.createElement("button");
+  btn.className = "btn primary";
+  btn.textContent = label || "Apply this setting";
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    btn.textContent = "Applying…";
+    const res = await fetch("/api/advisor/apply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ setting }),
+    });
+    const body = await res.json();
+    if (res.ok) {
+      btn.textContent = `Applied: ${body.setting}`;
+      say(`Applied ${body.setting} in Home Assistant.`);
+      await refreshGraph();
+    } else {
+      btn.disabled = false;
+      btn.textContent = label || "Apply this setting";
+      say(`Apply failed: ${body.detail || res.status}`);
+    }
+  });
+  return btn;
+}
+document.getElementById("advisor-btn").addEventListener("click", async () => {
+  if (!photoId) { say("Upload a photo first."); return; }
+  say("Asking Spark for lighting settings…");
+  advisorView.innerHTML = "";
+  const res = await fetch("/api/advisor/suggest", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      photo_id: photoId,
+      request_text: document.getElementById("advisor-text").value,
+    }),
+  });
+  const body = await res.json();
+  if (!res.ok) {
+    const div = document.createElement("div");
+    div.className = "plan rejected";
+    div.textContent = `Advisor rejected: ${body.detail || res.status}`;
+    advisorView.appendChild(div);
+    return;
+  }
+  for (const setting of body.settings) {
+    const div = document.createElement("div");
+    div.className = "plan";
+    div.innerHTML = `<strong>${setting.name}</strong><br />${setting.description}` +
+      `<br /><span class="muted">${advisorActionsText(setting)}</span>`;
+    const previewBtn = document.createElement("button");
+    previewBtn.className = "btn";
+    previewBtn.textContent = "Preview (illustrative)";
+    previewBtn.addEventListener("click", async () => {
+      previewBtn.disabled = true;
+      previewBtn.textContent = "Generating preview…";
+      const r2 = await fetch("/api/advisor/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          photo_id: photoId,
+          setting,
+          request_text: document.getElementById("advisor-text").value,
+        }),
+      });
+      const b2 = await r2.json();
+      previewBtn.disabled = false;
+      previewBtn.textContent = "Preview (illustrative)";
+      if (!r2.ok) { say(`Preview failed: ${b2.detail || r2.status}`); return; }
+      advisorPreview.src = b2.preview_url;
+      advisorPreviewWrap.hidden = false;
+      say(`Illustrative preview ready via ${b2.model}. Approving applies only the listed light actions.`);
+    });
+    div.appendChild(document.createElement("br"));
+    div.appendChild(previewBtn);
+    div.appendChild(advisorApplyButton(setting));
+    advisorView.appendChild(div);
+  }
+  const decline = document.createElement("button");
+  decline.className = "btn";
+  decline.textContent = "Decline — change nothing";
+  decline.addEventListener("click", () => {
+    advisorView.innerHTML = "";
+    advisorPreviewWrap.hidden = true;
+    say("Declined. Nothing changed in Home Assistant.");
+  });
+  advisorView.appendChild(decline);
+  say("Advisor settings ready — preview or apply one, or decline.");
+});
+document.getElementById("tod-btn").addEventListener("click", async () => {
+  if (!photoId) { say("Upload a photo first."); return; }
+  const variant = document.getElementById("tod-variant").value;
+  say(`Generating ${variant} preview…`);
+  todView.innerHTML = "";
+  const res = await fetch("/api/advisor/time-of-day", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ photo_id: photoId, variant }),
+  });
+  const body = await res.json();
+  if (!res.ok) {
+    const div = document.createElement("div");
+    div.className = "plan rejected";
+    div.textContent = `Time-of-day preview failed: ${body.detail || res.status}`;
+    todView.appendChild(div);
+    return;
+  }
+  const div = document.createElement("div");
+  div.className = "plan";
+  div.innerHTML = `<strong>${body.label}</strong> — illustrative preview<br />${body.description}` +
+    `<br /><span class="muted">${advisorActionsText(body.setting)}</span>`;
+  const img = document.createElement("img");
+  img.src = body.preview_url;
+  img.alt = `${body.label} illustrative preview`;
+  div.appendChild(img);
+  div.appendChild(advisorApplyButton(body.setting, "Apply matching settings"));
+  todView.appendChild(div);
+  say(`${body.label} preview ready (illustrative). Apply to set the matching lights.`);
 });
 
 load().then(connect);
