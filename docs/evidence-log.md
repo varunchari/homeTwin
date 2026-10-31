@@ -48,3 +48,9 @@ Baseten A/B rows (Oct 30 only): record model string as shown in the Baseten dash
 - Cause: test_rearrange.py rebound shared store/app DATA_DIR at import and rmtree'd it in tearDownModule, deleting the dir mid-suite; 14 downstream tests failed appending sam_calls.jsonl/voice_calls.jsonl + 1 reset-count failure from leaked move origins.
 - Fix: setdefault DATA_DIR convention (no rebind, no rmtree), drain move origins in setUp.
 - `hometwin/.venv/bin/python -m unittest discover -s hometwin/tests` -> Ran 100 tests, OK.
+## 2026-10-31 - Live verification beats (final build, Lightsail)
+- Delay auto-off OBSERVED (no-sunset): proposal #34, hosted muse-spark-1.3, 3423 ms, delay_s=60; approved hometwin_34; door tap simulated on; reading light on at T+10s through T+50s, off at T+60s with no manual tap.
+- Lamp-move OBSERVED: Spark move-propose 7110 ms to [0.34, 0.54]; Muse Image move-preview returned illustrative preview; approve moved pin lamp (0.663, 0.636) -> (0.34, 0.54); binding light.reading_light retained; tap toggled reading light on.
+- Scene Composer OBSERVED: saved "Live Check" (floor off, string off, reading on); apply returned all three actions; HA states matched.
+- Sunset setup: reset cleared hometwin_34, history, bindings, 1 moved pin, 1 scene; scrubbed stale hometwin_33 ghost (entity_registry -2, restore_state -10); proposal #35, hosted muse-spark-1.3, 4570 ms, after-sunset condition; approved hometwin_35; What-If day=False / night=True; sun.sun above_horizon. Live sunset fire still pending local sunset (~01:00 UTC / 18:00 PDT).
+- Deploy: final build synced to Lightsail with host .env preserved; backend rebuilt; HA restarted; Caddy serves versioned UI shell (200, 8249 bytes with Host header).
