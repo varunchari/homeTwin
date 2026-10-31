@@ -868,6 +868,209 @@ async def what_if(req: WhatIfRequest) -> dict:
             "action": compiled["action"] if fires else []}
 
 
+# --- Rearrange (lamp-move proposals) + Scene Composer ---
+
+# In-memory move proposals: propose -> preview -> approve. Only the approve
+# step touches the scene graph (region position); bindings stay put, so tap
+# keeps working on the same light afterwards. Decline = nothing. Reset
+# restores original positions (see reset_baseline).
+_move_proposals: dict[int, dict] = {}
+_move_next_id = 1
+
+MOVE_SYSTEM = (
+    "You place a lamp in a room photo. Emit ONE JSON object matching the schema: "
+    "x and y are the new top-left corner of the lamp's region as fractions "
+    "of photo width/height (0..1, origin top-left), staying inside the room "
+    "and away from doors and walkways; reason is one short sentence a "
+    "homeowner would understand. Never emit anything but the JSON object."
+)
+MOVE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "x": {"type": "number"}, "y": {"type": "number"},
+        "reason": {"type": "string"},
+    },
+    "required": ["x", "y", "reason"],
+}
+
+
+class MoveProposeRequest(BaseModel):
+    photo_id: int
+    object_id: str
+    instruction: str = ""
+
+
+class MovePreviewRequest(BaseModel):
+    photo_id: int
+    move_id: int
+
+
+class MoveApproveRequest(BaseModel):
+    photo_id: int
+    move_id: int
+
+
+def _move_region(photo_id: int, object_id: str) -> tuple[dict, dict]:
+    graph = scene_graph(photo_id)
+    if not graph:
+        raise HTTPException(status_code=404, detail="unknown photo")
+    region = next((r for r in graph["regions"]
+                   if r["object_id"] == object_id), None)
+    if not region:
+        raise HTTPException(status_code=404, detail="unknown region")
+    return graph, region
+
+
+@app.post("/api/photos/{photo_id}/move-propose")
+async def move_propose(photo_id: int, req: MoveProposeRequest) -> dict:
+    """Spark proposes a new pin position for a BOUND lamp. No scene change,
+    no image yet, no HA write — preview and approve are separate steps."""
+    import time
+    from spark_client import SparkError, complete_json
+
+    global _move_next_id
+    graph, region = _move_region(req.photo_id, req.object_id)
+    entity = graph["bindings"].get(req.object_id)
+    if not entity or not entity.startswith("light."):
+        raise HTTPException(
+            status_code=409,
+            detail="only a bound lamp can be moved (tap keeps working on the same light)")
+    t0 = time.monotonic()
+    try:
+        out = await complete_json(
+            MOVE_SYSTEM,
+            f"Room: {graph['photo']['width']}x{graph['photo']['height']}. "
+            f"Lamp region '{req.object_id}' ({region['phrase']}) now at "
+            f"x={region['x']:.3f} y={region['y']:.3f} w={region['w']:.3f} "
+            f"h={region['h']:.3f}. Request: {req.instruction or 'a better spot'}.",
+            MOVE_SCHEMA)
+    except SparkError as e:
+        raise HTTPException(status_code=502, detail=f"Spark move failed: {e}")
+    latency_ms = int((time.monotonic() - t0) * 1000)
+    try:
+        x = min(1.0, max(0.0, float(out["x"])))
+        y = min(1.0, max(0.0, float(out["y"])))
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(status_code=502, detail="Spark move was not coordinates")
+    move_id = _move_next_id
+    _move_next_id += 1
+    _move_proposals[move_id] = {
+        "move_id": move_id, "photo_id": req.photo_id,
+        "object_id": req.object_id, "x": x, "y": y,
+        "reason": str(out.get("reason", "")),
+    }
+    _spark_log(req.photo_id, latency_ms, 1, "move-propose")
+    return {"move_id": move_id, "object_id": req.object_id,
+            "from_xy": [region["x"], region["y"]], "to_xy": [x, y],
+            "reason": str(out.get("reason", "")), "latency_ms": latency_ms}
+
+
+@app.post("/api/photos/{photo_id}/move-preview")
+async def move_preview(request: Request, photo_id: int,
+                       req: MovePreviewRequest) -> dict:
+    """Illustrative Muse Image edit showing the lamp at the proposed spot.
+    Labelled illustrative in-UI; moves no pin and writes nothing to HA."""
+    import time
+    from image_client import IMAGE_MODEL, ImageError, edit_image
+
+    _limit_model(request)
+    proposal = _move_proposals.get(req.move_id)
+    if not proposal or proposal["photo_id"] != req.photo_id:
+        raise HTTPException(status_code=404, detail="unknown move proposal")
+    _photo, raw = _photo_bytes(req.photo_id)
+    _graph, region = _move_region(req.photo_id, proposal["object_id"])
+    t0 = time.monotonic()
+    try:
+        image_bytes = await edit_image(
+            raw, f"Move the {region['phrase']} to the "
+            f"{'left' if proposal['x'] < region['x'] else 'right'} side of the room, "
+            f"{'upper' if proposal['y'] < region['y'] else 'lower'} area, keeping "
+            "everything else in this room photo exactly the same")
+    except ImageError as e:
+        raise HTTPException(status_code=502, detail=f"image preview failed: {e}")
+    latency_ms = int((time.monotonic() - t0) * 1000)
+    name = _save_preview(image_bytes)
+    _log_image_call("move-preview", latency_ms, IMAGE_MODEL)
+    return {"move_id": req.move_id, "preview_url": f"/api/advisor/previews/{name}",
+            "illustrative": True, "to_xy": [proposal["x"], proposal["y"]]}
+
+
+@app.post("/api/photos/{photo_id}/move-approve")
+async def move_approve(photo_id: int, req: MoveApproveRequest) -> dict:
+    """Accept the proposal: the PIN moves, the binding does not. Tap keeps
+    working on the same light; HA stays untouched."""
+    import store as store_module
+
+    proposal = _move_proposals.get(req.move_id)
+    if not proposal or proposal["photo_id"] != req.photo_id:
+        raise HTTPException(status_code=404, detail="unknown move proposal")
+    _graph, region = _move_region(req.photo_id, proposal["object_id"])
+    store_module.record_move_origin(req.photo_id, proposal["object_id"],
+                                    region["x"], region["y"])
+    if not store_module.set_region_position(req.photo_id, proposal["object_id"],
+                                             proposal["x"], proposal["y"]):
+        raise HTTPException(status_code=404, detail="region vanished")
+    del _move_proposals[req.move_id]
+    return {"ok": True, "object_id": proposal["object_id"],
+            "from_xy": [region["x"], region["y"]],
+            "to_xy": [proposal["x"], proposal["y"]]}
+
+
+class SceneSaveRequest(BaseModel):
+    name: str
+
+
+@app.post("/api/scenes")
+async def scene_save(req: SceneSaveRequest) -> dict:
+    """Save current light states as a named scene. Pure capture, no HA write."""
+    import store as store_module
+
+    name = " ".join(req.name.split())
+    if not name or len(name) > 40:
+        raise HTTPException(status_code=422, detail="scene name 1-40 chars")
+    states = {s.get("entity_id"): s.get("state")
+              for s in await _ha_states()
+              if s.get("entity_id", "").startswith("light.")}
+    if not states:
+        raise HTTPException(status_code=502, detail="no lights found in HA")
+    store_module.save_scene(name, states)
+    return {"ok": True, "name": name, "states": states}
+
+
+@app.get("/api/scenes")
+async def scene_list() -> dict:
+    import store as store_module
+
+    return {"scenes": store_module.list_scenes()}
+
+
+@app.post("/api/scenes/{name}/apply")
+async def scene_apply(name: str) -> dict:
+    """Apply a saved scene: lights to their captured states. The Apply click
+    IS the approval — one explicit user action, allowlisted light on/off only."""
+    import store as store_module
+
+    scene = next((s for s in store_module.list_scenes() if s["name"] == name), None)
+    if not scene:
+        raise HTTPException(status_code=404, detail="unknown scene")
+    applied = []
+    for entity_id, state in scene["states"].items():
+        if not entity_id.startswith("light.") or state not in ("on", "off"):
+            continue
+        await _ha_service(f"light/turn_{state}", {"entity_id": entity_id})
+        applied.append({"entity_id": entity_id, "state": state})
+    return {"ok": True, "name": name, "applied": applied}
+
+
+@app.delete("/api/scenes/{name}")
+async def scene_delete(name: str) -> dict:
+    import store as store_module
+
+    if not store_module.delete_scene(name):
+        raise HTTPException(status_code=404, detail="unknown scene")
+    return {"ok": True, "name": name}
+
+
 # --- Design Advisor + time-of-day previews (illustrative only) ---
 
 def _preview_media_type(image_bytes: bytes) -> tuple[str, str]:
@@ -1175,9 +1378,19 @@ async def reset_baseline() -> dict:
     # Fresh-demo reset: bindings go too, so the suggest flow is showable on
     # every run. Regions (the segmentation result) are kept.
     bindings_cleared = store_module.clear_bindings()
+    # Rearrangement is a proposal too: moved pins return home, scenes go.
+    moves_restored = 0
+    for origin in store_module.pop_move_origins():
+        if store_module.set_region_position(origin["photo_id"],
+                                            origin["object_id"],
+                                            origin["x"], origin["y"]):
+            moves_restored += 1
+    scenes_cleared = store_module.clear_scenes()
+    _move_proposals.clear()
     return {"ok": True, "inputs_off": BASELINE_INPUTS, "lights_off": BASELINE_LIGHTS,
             "automations_cleared": cleared, "history_cleared": history_cleared,
-            "bindings_cleared": bindings_cleared}
+            "bindings_cleared": bindings_cleared,
+            "moves_restored": moves_restored, "scenes_cleared": scenes_cleared}
 
 
 @app.delete("/api/photos/{photo_id}/regions/{object_id}")

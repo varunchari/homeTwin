@@ -253,6 +253,20 @@ function refreshAutoSelects(boundIds) {
     }
     if (boundIds.includes(keep)) sel.value = keep;
   }
+  // Rearrange picker: bound lamps only.
+  const moveObject = document.getElementById("move-object");
+  if (moveObject) {
+    const keep = moveObject.value;
+    moveObject.innerHTML = "";
+    for (const id of boundIds.filter((o) => (bindings[o] || "").startsWith("light."))) {
+      const opt = document.createElement("option");
+      opt.value = id;
+      opt.textContent = `${prettyOid(id)} → ${prettyEntity(bindings[id])}`;
+      moveObject.appendChild(opt);
+    }
+    if ([...moveObject.options].some((o) => o.value === keep)) moveObject.value = keep;
+    document.getElementById("move-btn").disabled = moveObject.options.length === 0;
+  }
 }
 document.getElementById("plan-btn").addEventListener("click", async () => {
   if (!photoId) { say("Upload a photo first."); return; }
@@ -497,6 +511,135 @@ document.getElementById("suggest-btn").addEventListener("click", async () => {
   });
   proposalList.appendChild(all);
 });
+const moveView = document.getElementById("move-view");
+document.getElementById("move-btn").addEventListener("click", async () => {
+  if (!photoId) { say("Upload a photo first."); return; }
+  const objectSelect = document.getElementById("move-object");
+  const instruction = document.getElementById("move-text").value.trim();
+  if (!objectSelect.value) { say("Bind a lamp first."); return; }
+  say("Asking Spark where this lamp should go…");
+  moveView.innerHTML = "";
+  const res = await fetch(`/api/photos/${photoId}/move-propose`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ photo_id: photoId, object_id: objectSelect.value, instruction }),
+  });
+  const body = await res.json();
+  if (!res.ok) { say(`Move proposal failed: ${body.detail || res.status}`); return; }
+  const div = document.createElement("div");
+  div.className = "plan";
+  div.textContent = `Move ${prettyOid(body.object_id)}: ${body.reason} ` +
+    `(pin ${body.from_xy.map((v) => v.toFixed(2)).join(",")} → ${body.to_xy.map((v) => v.toFixed(2)).join(",")}).`;
+  const prevBtn = document.createElement("button");
+  prevBtn.className = "btn";
+  prevBtn.textContent = "Preview move";
+  prevBtn.addEventListener("click", async () => {
+    prevBtn.disabled = true;
+    const r2 = await fetch(`/api/photos/${photoId}/move-preview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ photo_id: photoId, move_id: body.move_id }),
+    });
+    const b2 = await r2.json();
+    if (!r2.ok) {
+      prevBtn.disabled = false;
+      say(`Move preview failed: ${b2.detail || r2.status}`);
+      return;
+    }
+    const img = document.createElement("img");
+    img.src = b2.preview_url;
+    img.alt = "Illustrative move preview";
+    img.className = "preview-img";
+    div.appendChild(document.createElement("br"));
+    div.appendChild(img);
+    const note = document.createElement("p");
+    note.className = "muted";
+    note.textContent = "Illustrative preview — the pin moves, the light stays put.";
+    div.appendChild(note);
+    const okBtn = document.createElement("button");
+    okBtn.className = "btn primary";
+    okBtn.textContent = "Approve move";
+    okBtn.addEventListener("click", async () => {
+      const r3 = await fetch(`/api/photos/${photoId}/move-approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photo_id: photoId, move_id: body.move_id }),
+      });
+      const b3 = await r3.json();
+      if (r3.ok) {
+        okBtn.disabled = true;
+        okBtn.textContent = `Moved ${prettyOid(b3.object_id)}`;
+        say(`Pin moved. Tap it — same light, same binding.`);
+        await refreshGraph();
+      } else {
+        say(`Move failed: ${b3.detail || r3.status}`);
+      }
+    });
+    const noBtn = document.createElement("button");
+    noBtn.className = "btn";
+    noBtn.textContent = "Decline";
+    noBtn.addEventListener("click", () => {
+      moveView.innerHTML = "";
+      say("Move declined — nothing changed.");
+    });
+    div.appendChild(okBtn);
+    div.appendChild(document.createTextNode(" "));
+    div.appendChild(noBtn);
+  });
+  div.appendChild(document.createElement("br"));
+  div.appendChild(prevBtn);
+  moveView.appendChild(div);
+});
+
+const sceneList = document.getElementById("scene-list");
+async function refreshScenes() {
+  const res = await fetch("/api/scenes");
+  const body = await res.json();
+  sceneList.innerHTML = "";
+  for (const s of body.scenes) {
+    const li = document.createElement("li");
+    const states = Object.entries(s.states)
+      .map(([id, st]) => `${prettyEntity(id)} ${st}`).join(", ");
+    li.textContent = `${s.name}: ${states} `;
+    const apply = document.createElement("button");
+    apply.className = "btn primary";
+    apply.textContent = "Apply";
+    apply.title = "This click is the approval: sets the listed lights";
+    apply.addEventListener("click", async () => {
+      const r = await fetch(`/api/scenes/${encodeURIComponent(s.name)}/apply`, { method: "POST" });
+      const b = await r.json();
+      say(r.ok ? `Scene "${s.name}" applied (${b.applied.length} lights).`
+                : `Apply failed: ${b.detail || r.status}`);
+    });
+    const del = document.createElement("button");
+    del.className = "btn";
+    del.textContent = "Delete";
+    del.addEventListener("click", async () => {
+      await fetch(`/api/scenes/${encodeURIComponent(s.name)}`, { method: "DELETE" });
+      await refreshScenes();
+    });
+    li.appendChild(apply);
+    li.appendChild(document.createTextNode(" "));
+    li.appendChild(del);
+    sceneList.appendChild(li);
+  }
+}
+document.getElementById("scene-save-btn").addEventListener("click", async () => {
+  const input = document.getElementById("scene-name");
+  const name = input.value.trim();
+  if (!name) { say("Name the scene first."); return; }
+  const res = await fetch("/api/scenes", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  const body = await res.json();
+  say(res.ok ? `Scene "${body.name}" saved.` : `Save failed: ${body.detail || res.status}`);
+  input.value = "";
+  await refreshScenes();
+});
+refreshScenes();
+
 document.getElementById("reset-btn").addEventListener("click", async () => {
   const btn = document.getElementById("reset-btn");
   btn.disabled = true; // one reset at a time; double-clicks read as failures
@@ -508,6 +651,8 @@ document.getElementById("reset-btn").addEventListener("click", async () => {
   planView.innerHTML = "";
   whatifView.innerHTML = "";
   proposalList.innerHTML = "";
+  moveView.innerHTML = "";
+  await refreshScenes();
   if (typeof advisorView !== "undefined" && advisorView) advisorView.innerHTML = "";
   if (typeof todView !== "undefined" && todView) todView.innerHTML = "";
   if (typeof advisorPreviewWrap !== "undefined" && advisorPreviewWrap) advisorPreviewWrap.hidden = true;

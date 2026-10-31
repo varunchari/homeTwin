@@ -46,6 +46,17 @@ CREATE TABLE IF NOT EXISTS bindings (
   created REAL NOT NULL,
   PRIMARY KEY (photo_id, object_id)
 );
+CREATE TABLE IF NOT EXISTS move_origins (
+  photo_id INTEGER NOT NULL REFERENCES photos(id),
+  object_id TEXT NOT NULL,
+  x REAL NOT NULL, y REAL NOT NULL,
+  PRIMARY KEY (photo_id, object_id)
+);
+CREATE TABLE IF NOT EXISTS scenes (
+  name TEXT PRIMARY KEY,
+  states TEXT NOT NULL,
+  created REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS proposals (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   photo_id INTEGER NOT NULL,
@@ -212,6 +223,87 @@ def delete_binding(photo_id: int, object_id: str) -> bool:
             (photo_id, object_id))
         conn.commit()
         return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def set_region_position(photo_id: int, object_id: str, x: float, y: float) -> bool:
+    """Move a region pin. Size and binding are untouched."""
+    conn = connect()
+    try:
+        cur = conn.execute(
+            "UPDATE regions SET x=?, y=? WHERE photo_id=? AND object_id=?",
+            (x, y, photo_id, object_id))
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def record_move_origin(photo_id: int, object_id: str, x: float, y: float) -> None:
+    """Remember a region's pre-move position once (reset restores it)."""
+    conn = connect()
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO move_origins (photo_id, object_id, x, y)"
+            " VALUES (?,?,?,?)", (photo_id, object_id, x, y))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def pop_move_origins() -> list[dict]:
+    conn = connect()
+    try:
+        rows = conn.execute(
+            "SELECT photo_id, object_id, x, y FROM move_origins").fetchall()
+        conn.execute("DELETE FROM move_origins")
+        conn.commit()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def save_scene(name: str, states: dict) -> None:
+    import json
+    conn = connect()
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO scenes (name, states, created)"
+            " VALUES (?,?,?)", (name, json.dumps(states), time.time()))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def list_scenes() -> list[dict]:
+    import json
+    conn = connect()
+    try:
+        rows = conn.execute(
+            "SELECT name, states, created FROM scenes ORDER BY name").fetchall()
+        return [{"name": r["name"], "states": json.loads(r["states"]),
+                 "created": r["created"]} for r in rows]
+    finally:
+        conn.close()
+
+
+def delete_scene(name: str) -> bool:
+    conn = connect()
+    try:
+        cur = conn.execute("DELETE FROM scenes WHERE name=?", (name,))
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def clear_scenes() -> int:
+    conn = connect()
+    try:
+        cur = conn.execute("DELETE FROM scenes")
+        conn.commit()
+        return cur.rowcount
     finally:
         conn.close()
 

@@ -132,6 +132,24 @@
         <div id="tod-view"></div>
       </section>
       <section>
+        <h2>7 · Rearrange</h2>
+        <p class="muted">A proposed rearrangement, not an actuation: the pin moves, the light stays put, tap keeps working. Decline changes nothing.</p>
+        <div id="move-row">
+          <select id="move-object" title="Lamp to move"></select>
+          <input id="move-text" placeholder="Move where — e.g. closer to the sofa" />
+        </div>
+        <button id="move-btn" class="btn primary" disabled title="Bind a lamp first">Propose move</button>
+        <div id="move-view"></div>
+      </section>
+      <section>
+        <h2>8 · Scenes</h2>
+        <div id="scene-row">
+          <input id="scene-name" placeholder="Scene name — e.g. movie night" maxlength="40" />
+          <button id="scene-save-btn" class="btn">Save current lights</button>
+        </div>
+        <ul id="scene-list" class="proposals"></ul>
+      </section>
+      <section>
         <h2>Regions</h2>
         <p class="legend"><span class="swatch"></span> SAM mask <span class="swatch dashed"></span> hand-drawn
           <span class="pin-key bound">Bound</span> <span class="pin-key on">ON</span> <span class="pin-key selected">Selected</span></p>

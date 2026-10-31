@@ -214,6 +214,12 @@ body.drawing #photo-wrap { cursor: crosshair; }
 #auto-row select, #auto-row-opts select { width: 100%; font: inherit; font-size: 0.8rem; padding: 0.4rem; border-radius: 6px; border: 1px solid #3a4653; background: #0d1114; color: var(--text); }
 #auto-row .arrow { color: var(--muted); text-align: center; transform: rotate(90deg); }
 #auto-text { width: 100%; font: inherit; font-size: 0.85rem; padding: 0.45rem 0.6rem; border-radius: 6px; border: 1px solid #3a4653; background: #0d1114; color: var(--text); margin-bottom: 0.5rem; }
+#move-row, #scene-row { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.5rem; }
+#move-row select, #scene-row input, #move-text {
+  width: 100%; font: inherit; font-size: 0.8rem; padding: 0.4rem;
+  border-radius: 6px; border: 1px solid #3a4653; background: #0d1114; color: var(--text);
+}
+.preview-img { width: 100%; border-radius: 6px; margin-top: 0.5rem; }
 #plan-btn { width: 100%; }
 .plan { margin-top: 0.6rem; font-size: 0.85rem; padding: 0.6rem 0.7rem; background: var(--panel); border: 1px solid var(--sam); border-radius: 8px; line-height: 1.6; }
 .plan.rejected { border-color: var(--danger); }
