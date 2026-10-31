@@ -1065,6 +1065,75 @@ async def advisor_preview_image(name: str) -> FileResponse:
     return FileResponse(str(path), media_type=media_type)
 
 
+# --- Voice: push-to-talk transcription into the typed pipeline ---
+
+@app.post("/api/voice/transcribe")
+async def voice_transcribe(file: UploadFile) -> dict:
+    """Transcribe one push-to-talk recording. Audio is held in memory
+    only and never written to disk; only the transcript is logged.
+    A supported transcript is returned with its match; anything else
+    is returned with supported=False and must not be executed."""
+    import time
+    from voice import TRANSCRIBE_MODEL, TranscribeError, match_utterance, transcribe_audio
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=422, detail="empty recording")
+    if len(raw) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="recording too large (10 MB max)")
+    t0 = time.monotonic()
+    try:
+        transcript = await transcribe_audio(raw, file.content_type or "audio/webm")
+    except TranscribeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    latency_ms = int((time.monotonic() - t0) * 1000)
+    matched = match_utterance(transcript)
+    import json
+
+    with open(DATA_DIR / "voice_calls.jsonl", "a") as f:
+        f.write(json.dumps({"ts": time.time(), "model": TRANSCRIBE_MODEL,
+                            "latency_ms": latency_ms, "transcript": transcript,
+                            "supported": matched is not None,
+                            "kind": matched["kind"] if matched else None}) + "\n")
+    if not matched:
+        return {"transcript": transcript, "supported": False,
+                "matched": None, "note": "not supported yet",
+                "latency_ms": latency_ms, "model": TRANSCRIBE_MODEL}
+    return {"transcript": transcript, "supported": True,
+            "matched": {"key": matched["key"], "kind": matched["kind"],
+                        "entity_id": matched["entity_id"],
+                        "service": matched["service"],
+                        "automate_text": matched["automate_text"],
+                        "source_entity": matched["source_entity"],
+                        "target_entity": matched["target_entity"]},
+            "latency_ms": latency_ms, "model": TRANSCRIBE_MODEL}
+
+
+class VoiceControlRequest(BaseModel):
+    entity_id: str
+    service: str
+
+
+@app.post("/api/voice/control")
+async def voice_control(req: VoiceControlRequest) -> dict:
+    """Direct light control for a tap-control utterance, clicked
+    explicitly by the user after seeing the transcript. Validated to
+    light.* turn_on / turn_off only; this is a tap, not an automation."""
+    registry = {s.get("entity_id") for s in await _ha_states()}
+    if req.entity_id not in registry:
+        raise HTTPException(status_code=422,
+                            detail=f"Unknown entity '{req.entity_id}' (not in this home).")
+    if not req.entity_id.startswith("light."):
+        raise HTTPException(status_code=422,
+                            detail=f"Entity '{req.entity_id}' is not a light.")
+    if req.service not in ("light.turn_on", "light.turn_off"):
+        raise HTTPException(status_code=422,
+                            detail=f"Service '{req.service}' is not allowed.")
+    ha_service = req.service.replace(".", "/", 1)
+    await _ha_service(ha_service, {"entity_id": req.entity_id})
+    return {"ok": True, "entity_id": req.entity_id, "service": req.service}
+
+
 @app.post("/api/reset")
 async def reset_baseline() -> dict:
     """One-click return to the frozen baseline: every demo input off, every

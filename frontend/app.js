@@ -511,6 +511,8 @@ document.getElementById("reset-btn").addEventListener("click", async () => {
   if (typeof advisorView !== "undefined" && advisorView) advisorView.innerHTML = "";
   if (typeof todView !== "undefined" && todView) todView.innerHTML = "";
   if (typeof advisorPreviewWrap !== "undefined" && advisorPreviewWrap) advisorPreviewWrap.hidden = true;
+  if (typeof voiceTranscript !== "undefined" && voiceTranscript) voiceTranscript.hidden = true;
+  if (typeof voiceAction !== "undefined" && voiceAction) voiceAction.innerHTML = "";
   autoText.value = "";
   whatifDoor.value = "on";
   whatifSun.value = "day";
@@ -760,5 +762,171 @@ document.getElementById("tod-btn").addEventListener("click", async () => {
   todView.appendChild(div);
   say(`${body.label} preview ready (illustrative). Apply to set the matching lights.`);
 });
+
+// Voice: push-to-talk into the typed pipeline. Hold the button to
+// record; releasing it transcribes once. The transcript is always
+// shown, a supported automation transcript fills the Automate box
+// (the user still clicks Generate plan, then approves), a supported
+// tap transcript shows an explicit control button, and anything else
+// shows "not supported yet" and is never executed. No audio is kept.
+const voiceBtn = document.getElementById("voice-btn");
+const voiceTranscript = document.getElementById("voice-transcript");
+const voiceAction = document.getElementById("voice-action");
+let voiceRecorder = null;
+let voiceChunks = [];
+function showTranscript(text, supported) {
+  voiceTranscript.hidden = false;
+  voiceTranscript.className = "plan" + (supported === false ? " rejected" : "");
+  voiceTranscript.textContent = `Transcript: "${text}"` +
+    (supported === false ? " — not supported yet." : "");
+}
+function objectIdForEntity(entityId) {
+  for (const [objectId, bound] of Object.entries(bindings)) {
+    if (bound === entityId) return objectId;
+  }
+  return null;
+}
+async function sendVoiceRecording(blob) {
+  voiceTranscript.hidden = false;
+  voiceTranscript.className = "plan";
+  voiceTranscript.textContent = "Transcribing…";
+  voiceAction.innerHTML = "";
+  const form = new FormData();
+  form.append("file", blob, "voice.wav");
+  const res = await fetch("/api/voice/transcribe", { method: "POST", body: form });
+  const body = await res.json();
+  if (!res.ok) {
+    voiceTranscript.className = "plan rejected";
+    voiceTranscript.textContent = `Transcription failed: ${body.detail || res.status}`;
+    say("Transcription failed.");
+    return;
+  }
+  showTranscript(body.transcript, body.supported);
+  if (!body.supported) {
+    say("Not supported yet. Try one of the listed utterances, or type instead.");
+    return;
+  }
+  const matched = body.matched;
+  if (matched.kind === "tap-control") {
+    const btn = document.createElement("button");
+    btn.className = "btn primary";
+    btn.textContent = `Turn ${prettyEntity(matched.entity_id)} on`;
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      const r2 = await fetch("/api/voice/control", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entity_id: matched.entity_id, service: matched.service }),
+      });
+      const b2 = await r2.json();
+      if (r2.ok) {
+        btn.textContent = `Turned ${prettyEntity(matched.entity_id)} on`;
+        say(`Turned ${prettyEntity(matched.entity_id)} on.`);
+        await refreshGraph();
+      } else {
+        btn.disabled = false;
+        say(`Voice control failed: ${b2.detail || r2.status}`);
+      }
+    });
+    voiceAction.appendChild(btn);
+    say("Transcript matches a supported tap-control utterance. Click to turn the light on.");
+    return;
+  }
+  // Automation pattern: fill the typed pipeline, do not generate yet.
+  autoText.value = matched.automate_text || "";
+  const sourceId = objectIdForEntity(matched.source_entity);
+  const targetId = objectIdForEntity(matched.target_entity);
+  if (sourceId) sourceSelect.value = sourceId;
+  if (targetId) targetSelect.value = targetId;
+  say("Transcript filled into Automate. Review it, then Generate plan and approve as usual.");
+}
+if (voiceBtn) {
+  const startVoice = async (ev) => {
+    ev.preventDefault();
+    if (!photoId) { say("Upload a photo first."); return; }
+    if (typeof MediaRecorder === "undefined") {
+      say("Voice recording is not supported in this browser. Type the instruction instead.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      voiceChunks = [];
+      voiceRecorder = new MediaRecorder(stream);
+      voiceRecorder.ondataavailable = (e) => { if (e.data.size) voiceChunks.push(e.data); };
+      voiceRecorder.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        if (voiceChunks.length) {
+          toWav16k(new Blob(voiceChunks)).then(sendVoiceRecording).catch(() => {
+            say("Could not prepare that recording (browser audio unsupported). Type it instead.");
+          });
+        }
+      };
+      voiceRecorder.start();
+      voiceBtn.textContent = "Listening… release to send";
+      voiceBtn.classList.add("active");
+    } catch (e) {
+      say("Microphone access was not granted. Type the instruction instead.");
+    }
+  };
+  const stopVoice = (ev) => {
+    if (ev) ev.preventDefault();
+    if (voiceRecorder && voiceRecorder.state === "recording") voiceRecorder.stop();
+    voiceRecorder = null;
+    voiceBtn.textContent = "Hold to talk";
+    voiceBtn.classList.remove("active");
+  };
+  voiceBtn.addEventListener("pointerdown", startVoice);
+  voiceBtn.addEventListener("pointerup", stopVoice);
+  voiceBtn.addEventListener("pointerleave", stopVoice);
+}
+
+// The transcribe API accepts WAV uploads only, so the browser converts the
+// recording (usually webm/opus) to mono 16-bit WAV at 16 kHz before upload.
+function encodeWav(samples, sampleRate) {
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+  const writeStr = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+  writeStr(0, "RIFF");
+  view.setUint32(4, 36 + samples.length * 2, true);
+  writeStr(8, "WAVE");
+  writeStr(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeStr(36, "data");
+  view.setUint32(40, samples.length * 2, true);
+  for (let i = 0; i < samples.length; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  }
+  return new Blob([buffer], { type: "audio/wav" });
+}
+
+async function toWav16k(blob) {
+  const raw = await blob.arrayBuffer();
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  try {
+    const decoded = await ctx.decodeAudioData(raw);
+    const targetRate = 16000;
+    const offline = new OfflineAudioContext(1, Math.floor(decoded.length * targetRate / decoded.sampleRate), targetRate);
+    const src = offline.createBufferSource();
+    src.buffer = decoded;
+    // Multi-channel input is downmixed by connecting through one node.
+    const downmix = offline.createGain();
+    const splitter = offline.createChannelSplitter(decoded.numberOfChannels);
+    src.connect(splitter);
+    for (let c = 0; c < decoded.numberOfChannels; c++) splitter.connect(downmix, c);
+    downmix.connect(offline.destination);
+    src.start();
+    const rendered = await offline.startRendering();
+    return encodeWav(rendered.getChannelData(0), targetRate);
+  } finally {
+    ctx.close();
+  }
+}
 
 load().then(connect);

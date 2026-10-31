@@ -84,6 +84,18 @@
         <div id="plan-view"></div>
       </section>
       <section>
+        <h2>Voice</h2>
+        <p class="muted">Push-to-talk only. The transcript is always shown below, and voice is never the only path — the typed Automate box above still works. No spoken replies: transcription is speech-to-text only. Audio is sent once for transcription and is not stored.</p>
+        <button id="voice-btn" class="btn primary">Hold to talk</button>
+        <div id="voice-transcript" class="plan" hidden></div>
+        <div id="voice-action"></div>
+        <p class="muted">Supported utterances only — anything else gets "not supported yet" and is never executed:
+          "Turn the reading light on" ·
+          "When the door opens, turn the reading light on" ·
+          "When the door opens after sunset, turn the string lights on" ·
+          "When the door opens, turn the reading light on, off after a minute"</p>
+      </section>
+      <section>
         <h2>5 · What-If <span class="sim-tag">simulated</span></h2>
         <div id="whatif-row">
           <select id="whatif-proposal" title="Automation proposal"></select>
