@@ -6,22 +6,17 @@ Run with the project venv:
 
 import io
 import os
-import shutil
 import sys
 import tempfile
 import unittest
 
-TEST_DIR = tempfile.mkdtemp(prefix="hometwin-test-rearrange-")
-os.environ["DATA_DIR"] = TEST_DIR
+os.environ.setdefault("DATA_DIR", tempfile.mkdtemp(prefix="hometwin-test-rearrange-"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
 import app as proxy  # noqa: E402
 import image_client  # noqa: E402
 import spark_client  # noqa: E402
 import store as store_module  # noqa: E402
-
-store_module.DATA_DIR = store_module.Path(TEST_DIR)
-proxy.DATA_DIR = store_module.Path(TEST_DIR)
 
 
 async def _no_sam(image_bytes, phrase):
@@ -121,6 +116,7 @@ class RearrangeEndpointTest(unittest.TestCase):
             SERVICE_CALLS.append((service, payload.get("entity_id")))
 
         proxy._ha_service = fake_service
+        store_module.pop_move_origins()
 
     def tearDown(self):
         proxy.httpx.AsyncClient = self._saved_client
@@ -251,10 +247,6 @@ class SceneEndpointTest(unittest.TestCase):
         body = self.client.post("/api/reset").json()
         self.assertGreaterEqual(body["scenes_cleared"], 1)
         self.assertEqual(self.client.get("/api/scenes").json()["scenes"], [])
-
-
-def tearDownModule():
-    shutil.rmtree(TEST_DIR, ignore_errors=True)
 
 
 if __name__ == "__main__":
