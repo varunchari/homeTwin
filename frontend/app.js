@@ -45,6 +45,7 @@ function render() {
   if (autoCountEl) autoCountEl.textContent = `${autoCount} automation${autoCount === 1 ? "" : "s"}`;
   if (typeof updatePins === "function") updatePins();
   if (typeof syncEntitySelect === "function") syncEntitySelect();
+  if (typeof updateSteps === "function") updateSteps();
 }
 
 async function load() {
@@ -108,6 +109,28 @@ function say(msg) { photoMsg.textContent = msg; }
 function fmtFired(iso) {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? String(iso) : d.toLocaleString();
+}
+
+// Guided demo rail: 1 Photo → 2 Bind → 3 Tap → 4 Automate → 5 What-If.
+// Each chip lights up as its step completes this session; the next open
+// step is highlighted so a stranger knows what to do. Buttons for later
+// steps stay disabled until their prerequisites exist.
+let tapped = false;
+let whatifDone = false;
+function updateSteps() {
+  const rail = document.getElementById("steps");
+  if (!rail || typeof whatifProposal === "undefined") return;
+  const done = [
+    photoId != null,
+    Object.keys(bindings).length > 0,
+    tapped,
+    whatifProposal.options.length > 0,
+    whatifDone,
+  ];
+  [...rail.children].forEach((li, i) => {
+    li.classList.toggle("done", !!done[i]);
+    li.classList.toggle("active", !done[i] && (i === 0 || done[i - 1]));
+  });
 }
 
 let bindings = {};
@@ -226,6 +249,7 @@ async function refreshGraph() {
   refreshAutoSelects(Object.keys(bindings));
   document.getElementById("plan-btn").disabled = Object.keys(bindings).length === 0;
   if (selectedId) showSelected(selectedId);
+  updateSteps();
 }
 
 function selectRegion(objectId) {
@@ -387,6 +411,7 @@ async function refreshProposals() {
   }
   if ([...whatifProposal.options].some((o) => o.value === keep)) whatifProposal.value = keep;
   document.getElementById("whatif-btn").disabled = whatifProposal.options.length === 0;
+  updateSteps();
 }
 document.getElementById("whatif-btn").addEventListener("click", async () => {
   if (!photoId) { say("Upload a photo first."); return; }
@@ -413,6 +438,8 @@ document.getElementById("whatif-btn").addEventListener("click", async () => {
       : `SIMULATED: no fire — ${body.condition_note}.`)
     : `What-If failed: ${body.detail || res.status}`;
   whatifView.appendChild(div);
+  if (res.ok) whatifDone = true;
+  updateSteps();
 });
 
 async function tapSelected() {
@@ -423,6 +450,8 @@ async function tapSelected() {
     body: JSON.stringify({ object_id: selectedId }),
   });
   const body = await res.json();
+  if (res.ok) tapped = true;
+  updateSteps();
   say(res.ok ? `Tapped ${selectedId} (${body.action}). Watch the Devices panel.` : `Tap failed: ${body.detail || res.status}`);
 }
 
@@ -686,6 +715,13 @@ document.getElementById("reset-btn").addEventListener("click", async () => {
   autoText.value = "";
   whatifDoor.value = "on";
   whatifSun.value = "day";
+  const moveText = document.getElementById("move-text");
+  if (moveText) moveText.value = "";
+  const sceneName = document.getElementById("scene-name");
+  if (sceneName) sceneName.value = "";
+  tapped = false;
+  whatifDone = false;
+  updateSteps();
   deselect();
   await load();
   if (photoId) { await refreshGraph(); await refreshProposals(); }
@@ -715,6 +751,8 @@ photoInput.addEventListener("change", async () => {
 
 async function usePhoto(body) {
   photoId = body.photo_id;
+  tapped = false;
+  whatifDone = false;
   document.getElementById("suggest-btn").disabled = false;
   photoEl.src = `/api/photos/${photoId}/image`;
   photoEl.hidden = false;

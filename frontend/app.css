@@ -204,6 +204,10 @@ body.drawing #photo-wrap { cursor: crosshair; }
 .devices .dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; background: #5a636d; }
 .devices .dot.on { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
 .devices .fired { color: var(--muted); font-size: 0.75rem; margin-left: auto; padding-left: 0.5rem; }
+#steps { display: flex; gap: 0.5rem; list-style: none; margin: 0.6rem 0 0; padding: 0 1rem; flex-wrap: wrap; }
+#steps li { font-size: 0.78rem; padding: 0.3rem 0.7rem; border-radius: 999px; border: 1px solid #2a343e; color: var(--muted); background: var(--panel); }
+#steps li.active { border-color: var(--accent); color: var(--text); }
+#steps li.done { border-color: var(--accent); color: var(--accent); }
 .plan.conflict { border-color: #b98a1d; background: #2a2410; margin-top: 0.5rem; }
 .proposals { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 0.4rem; }
 .proposals li {
