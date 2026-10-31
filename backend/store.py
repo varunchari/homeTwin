@@ -379,6 +379,19 @@ def list_proposals(photo_id: int | None = None) -> list[dict]:
         conn.close()
 
 
+def deployed_ir_summaries(photo_id: int) -> list[dict]:
+    """Deployed proposals for one photo, with parsed IRs for conflict checks."""
+    import json
+    conn = connect()
+    try:
+        rows = conn.execute(
+            "SELECT id, ir FROM proposals WHERE photo_id=? AND status='deployed'"
+            " ORDER BY id", (photo_id,)).fetchall()
+        return [{"id": r["id"], "ir": json.loads(r["ir"])} for r in rows]
+    finally:
+        conn.close()
+
+
 def set_proposal_status(proposal_id: int, status: str) -> None:
     conn = connect()
     try:

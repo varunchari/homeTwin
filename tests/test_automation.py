@@ -317,6 +317,28 @@ class ProposeApproveTest(unittest.TestCase):
             os.environ.pop("BASETEN_API_KEY", None)
             os.environ.pop("BASETEN_MODEL", None)
 
+    def test_propose_conflict_warning_none_on_first_plan(self):
+        pid = make_bound_photo(self.client, w=517)
+        body = self.client.post("/api/automations/propose",
+                                json={"photo_id": pid, "source_object_id": "door",
+                                      "target_object_id": "lamp", "text": ""}).json()
+        self.assertIsNone(body["conflict_warning"])
+
+    def test_propose_conflict_warns_when_deployed_rule_differs(self):
+        pid = make_bound_photo(self.client, w=518)
+        first = self.client.post("/api/automations/propose",
+                                 json={"photo_id": pid, "source_object_id": "door",
+                                       "target_object_id": "lamp", "text": ""}).json()
+        self.assertIsNone(first["conflict_warning"])
+        ok = self.client.post(f"/api/automations/{first['proposal_id']}/approve")
+        self.assertTrue(ok.json()["ok"])
+        second = self.client.post("/api/automations/propose",
+                                  json={"photo_id": pid, "source_object_id": "door",
+                                        "target_object_id": "lamp", "text": "",
+                                        "delay_s": 60}).json()
+        self.assertIn(f"Rule #{first['proposal_id']}", second["conflict_warning"])
+        self.assertIn("both will fire", second["conflict_warning"])
+
     def test_propose_unbound_source_conflicts(self):
         pid = make_bound_photo(self.client, w=516)
         r = self.client.post("/api/automations/propose",

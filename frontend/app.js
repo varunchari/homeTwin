@@ -3,6 +3,7 @@
 const statusEl = document.getElementById("status");
 const listEl = document.getElementById("entities");
 const states = new Map();
+const stateAttrs = new Map(); // entity_id -> HA attributes (last_triggered, …)
 
 function render() {
   listEl.innerHTML = "";
@@ -17,6 +18,14 @@ function render() {
     dot.title = st;
     li.appendChild(name);
     li.appendChild(dot);
+    if (id.startsWith("automation.")) {
+      const fired = document.createElement("span");
+      fired.className = "fired";
+      const lt = (stateAttrs.get(id) || {}).last_triggered;
+      fired.textContent = lt ? `last fired ${fmtFired(lt)}` : "never fired";
+      fired.title = lt ? `last_triggered: ${lt}` : "this rule has not fired yet";
+      li.appendChild(fired);
+    }
     listEl.appendChild(li);
   }
   // Ambient strip: sun + lights-on at a glance. Pins follow live state too.
@@ -43,7 +52,11 @@ async function load() {
   const entities = await res.json();
   noteNames(entities);
   states.clear(); // deleted entities (e.g. reset-removed rules) must vanish too
-  for (const e of entities) states.set(e.entity_id, e.state);
+  stateAttrs.clear();
+  for (const e of entities) {
+    states.set(e.entity_id, e.state);
+    stateAttrs.set(e.entity_id, e.attributes || {});
+  }
   render();
   await refreshEntities();
 }
@@ -57,6 +70,7 @@ function connect() {
     const st = msg?.data?.new_state;
     if (st) {
       states.set(st.entity_id, st.state);
+      stateAttrs.set(st.entity_id, st.attributes || {});
       render();
     }
   };
@@ -90,6 +104,11 @@ for (const p of SUGGESTED) {
 }
 
 function say(msg) { photoMsg.textContent = msg; }
+
+function fmtFired(iso) {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? String(iso) : d.toLocaleString();
+}
 
 let bindings = {};
 let selectedId = null;
@@ -309,6 +328,12 @@ document.getElementById("plan-btn").addEventListener("click", async () => {
     `<br /><span class="muted">Compiled ${body.compiled.trigger.length} trigger(s), ` +
     `${body.compiled.action.length} action step(s) in ${body.latency_ms} ms. ` +
     `Approval required before deploy.</span>` + providerNote;
+  if (body.conflict_warning) {
+    const warn = document.createElement("div");
+    warn.className = "plan conflict";
+    warn.textContent = `Heads up: ${body.conflict_warning}`;
+    div.appendChild(warn);
+  }
   const btn = document.createElement("button");
   btn.className = "btn primary";
   btn.textContent = "Approve & deploy";

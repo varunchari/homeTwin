@@ -203,6 +203,8 @@ body.drawing #photo-wrap { cursor: crosshair; }
 }
 .devices .dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; background: #5a636d; }
 .devices .dot.on { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+.devices .fired { color: var(--muted); font-size: 0.75rem; margin-left: auto; padding-left: 0.5rem; }
+.plan.conflict { border-color: #b98a1d; background: #2a2410; margin-top: 0.5rem; }
 .proposals { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 0.4rem; }
 .proposals li {
   font-size: 0.8rem; padding: 0.5rem 0.6rem;
