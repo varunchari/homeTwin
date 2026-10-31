@@ -96,6 +96,17 @@
           "When the door opens, turn the reading light on, off after a minute"</p>
       </section>
       <section>
+        <h2>Gadgets <span class="sim-tag">simulated</span></h2>
+        <p class="muted">Simulated invocation of the Muse Gadgets Linux commands in <code>gadgets/commands.d/</code> — <code>hometwin.status</code> (read-only) and <code>hometwin.light.set</code> (string lights only). A paired Muse call from a real Pi gadget has <b>not</b> been verified; that needs an SDK token, a Pi/Linux gadget, and phone pairing (see <code>gadgets/README.md</code>). No gadget credential is in this browser or repo.</p>
+        <button id="gadget-status-btn" class="btn">Gadget read: HomeTwin status</button>
+        <div id="gadget-status-view" class="plan" hidden></div>
+        <div id="gadget-light-row">
+          <button id="gadget-light-on" class="btn">Gadget: string lights on</button>
+          <button id="gadget-light-off" class="btn">Gadget: string lights off</button>
+        </div>
+        <div id="gadget-light-view" class="plan" hidden></div>
+      </section>
+      <section>
         <h2>5 · What-If <span class="sim-tag">simulated</span></h2>
         <div id="whatif-row">
           <select id="whatif-proposal" title="Automation proposal"></select>

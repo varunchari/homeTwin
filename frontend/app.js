@@ -513,6 +513,8 @@ document.getElementById("reset-btn").addEventListener("click", async () => {
   if (typeof advisorPreviewWrap !== "undefined" && advisorPreviewWrap) advisorPreviewWrap.hidden = true;
   if (typeof voiceTranscript !== "undefined" && voiceTranscript) voiceTranscript.hidden = true;
   if (typeof voiceAction !== "undefined" && voiceAction) voiceAction.innerHTML = "";
+  if (typeof gadgetStatusView !== "undefined" && gadgetStatusView) gadgetStatusView.hidden = true;
+  if (typeof gadgetLightView !== "undefined" && gadgetLightView) gadgetLightView.hidden = true;
   autoText.value = "";
   whatifDoor.value = "on";
   whatifSun.value = "day";
@@ -927,6 +929,47 @@ async function toWav16k(blob) {
   } finally {
     ctx.close();
   }
+}
+
+// Gadgets: simulated invocation of the Pi gadget commands. The real
+// path is Muse -> Linux SDK custom commands -> backend -> HA; a
+// paired call has NOT been verified. This panel runs the same policy
+// and HA queries in the browser, labelled simulated, so a judge
+// without a Pi can see what the gadget would return and do.
+const gadgetStatusBtn = document.getElementById("gadget-status-btn");
+const gadgetStatusView = document.getElementById("gadget-status-view");
+const gadgetLightView = document.getElementById("gadget-light-view");
+if (gadgetStatusBtn) {
+  gadgetStatusBtn.addEventListener("click", async () => {
+    gadgetStatusView.hidden = false;
+    gadgetStatusView.textContent = "Reading via simulated gadget command…";
+    const res = await fetch("/api/gadgets/status");
+    const body = await res.json();
+    if (!res.ok) {
+      gadgetStatusView.textContent = `Gadget read failed: ${body.detail || res.status}`;
+      return;
+    }
+    const lights = body.lights.map((l) => `${prettyEntity(l.entity_id)}: ${l.state}`).join(", ");
+    gadgetStatusView.textContent = `Gadget read (simulated, hometwin.status): ${lights}; patio door: ${body.patio_door}; sun: ${body.sun}.`;
+  });
+  const gadgetLight = (on) => async () => {
+    gadgetLightView.hidden = false;
+    gadgetLightView.textContent = `Gadget command (simulated, hometwin.light.set): string lights ${on ? "on" : "off"}…`;
+    const res = await fetch("/api/gadgets/light", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entity_id: "light.string_lights", on }),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      gadgetLightView.textContent = `Gadget light rejected: ${body.detail || res.status}`;
+      return;
+    }
+    gadgetLightView.textContent = `Gadget command (simulated): string lights ${body.state} via ${body.service}. Watch the Devices panel — HA state, via WebSocket, reflects it.`;
+    await refreshGraph();
+  };
+  document.getElementById("gadget-light-on").addEventListener("click", gadgetLight(true));
+  document.getElementById("gadget-light-off").addEventListener("click", gadgetLight(false));
 }
 
 load().then(connect);

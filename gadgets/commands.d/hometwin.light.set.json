@@ -1,0 +1,17 @@
+{
+    "description": "Turn one HomeTwin light on or off. Only light.* entities are allowed; locks, covers, doors and helpers are rejected before any HA write.",
+    "exec": [
+        "/usr/local/bin/hometwin-light"
+    ],
+    "required": {
+        "entity_id": {
+            "description": "A light entity, e.g. light.string_lights.",
+            "type": "string"
+        },
+        "on": {
+            "description": "true to turn the light on, false to turn it off.",
+            "type": "boolean"
+        }
+    },
+    "timeout_ms": 15000
+}

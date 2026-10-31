@@ -1134,6 +1134,64 @@ async def voice_control(req: VoiceControlRequest) -> dict:
     return {"ok": True, "entity_id": req.entity_id, "service": req.service}
 
 
+# --- Gadgets: simulated invocation of the Pi gadget commands ---
+# The real gadget path is Muse (in the app) -> Linux SDK custom
+# commands in gadgets/commands.d/ -> this backend -> HA. That paired
+# call has NOT been verified (it needs an SDK token, a Pi/Linux
+# gadget, and phone pairing — see gadgets/README.md). These two
+# endpoints run the SAME policy and the SAME HA queries as the
+# gadget scripts, in the browser, so a judge without a Pi can see
+# what the gadget would return and do. They are labelled simulated
+# in the UI and must never be presented as a paired Muse call.
+
+@app.get("/api/gadgets/status")
+async def gadgets_status() -> dict:
+    """Simulated hometwin.status: read-only HA state, filtered to
+    lights + patio door + sun, exactly as the gadget script returns."""
+    lights = []
+    door = None
+    sun = None
+    for s in await _ha_states():
+        entity_id = s.get("entity_id", "")
+        if entity_id.startswith("light."):
+            lights.append({"entity_id": entity_id, "state": s.get("state")})
+        elif entity_id == "binary_sensor.patio_door":
+            door = s.get("state")
+        elif entity_id == "sun.sun":
+            sun = s.get("state")
+    lights.sort(key=lambda x: x["entity_id"])
+    return {"simulated": True, "command": "hometwin.status",
+            "lights": lights, "patio_door": door, "sun": sun,
+            "note": "Simulated gadget invocation — a paired Muse call has not been verified."}
+
+
+class GadgetLightRequest(BaseModel):
+    entity_id: str
+    on: bool
+
+
+@app.post("/api/gadgets/light")
+async def gadgets_light(req: GadgetLightRequest) -> dict:
+    """Simulated hometwin.light.set: ONE allowlisted light command,
+    through the same policy as the gadget script and voice control.
+    light.* turn_on / turn_off only; anything else is 422 before HA."""
+    registry = {s.get("entity_id") for s in await _ha_states()}
+    if req.entity_id not in registry:
+        raise HTTPException(status_code=422,
+                            detail=f"Unknown entity '{req.entity_id}' (not in this home).")
+    if not req.entity_id.startswith("light."):
+        raise HTTPException(status_code=422,
+                            detail=f"Entity '{req.entity_id}' is not a light — rejected, no HA write.")
+    service = "light.turn_on" if req.on else "light.turn_off"
+    await _ha_service(service.replace(".", "/", 1), {"entity_id": req.entity_id})
+    state = None
+    for s in await _ha_states():
+        if s.get("entity_id") == req.entity_id:
+            state = s.get("state")
+    return {"simulated": True, "command": "hometwin.light.set",
+            "ok": True, "entity_id": req.entity_id, "service": service, "state": state}
+
+
 @app.post("/api/reset")
 async def reset_baseline() -> dict:
     """One-click return to the frozen baseline: every demo input off, every

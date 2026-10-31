@@ -1,0 +1,8 @@
+{
+    "description": "Read HomeTwin virtual home state: light states, patio door, and sun. Read-only, no HA write.",
+    "exec": [
+        "/usr/local/bin/hometwin-status"
+    ],
+    "required": {},
+    "timeout_ms": 10000
+}
