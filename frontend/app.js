@@ -792,7 +792,7 @@ async function sendVoiceRecording(blob) {
   voiceTranscript.textContent = "Transcribing…";
   voiceAction.innerHTML = "";
   const form = new FormData();
-  form.append("file", blob, "voice.webm");
+  form.append("file", blob, "voice.wav");
   const res = await fetch("/api/voice/transcribe", { method: "POST", body: form });
   const body = await res.json();
   if (!res.ok) {
@@ -855,7 +855,11 @@ if (voiceBtn) {
       voiceRecorder.ondataavailable = (e) => { if (e.data.size) voiceChunks.push(e.data); };
       voiceRecorder.onstop = () => {
         stream.getTracks().forEach((t) => t.stop());
-        if (voiceChunks.length) sendVoiceRecording(new Blob(voiceChunks, { type: "audio/webm" }));
+        if (voiceChunks.length) {
+          toWav16k(new Blob(voiceChunks)).then(sendVoiceRecording).catch(() => {
+            say("Could not prepare that recording (browser audio unsupported). Type it instead.");
+          });
+        }
       };
       voiceRecorder.start();
       voiceBtn.textContent = "Listening… release to send";
@@ -874,6 +878,55 @@ if (voiceBtn) {
   voiceBtn.addEventListener("pointerdown", startVoice);
   voiceBtn.addEventListener("pointerup", stopVoice);
   voiceBtn.addEventListener("pointerleave", stopVoice);
+}
+
+// The transcribe API accepts WAV uploads only, so the browser converts the
+// recording (usually webm/opus) to mono 16-bit WAV at 16 kHz before upload.
+function encodeWav(samples, sampleRate) {
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+  const writeStr = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+  writeStr(0, "RIFF");
+  view.setUint32(4, 36 + samples.length * 2, true);
+  writeStr(8, "WAVE");
+  writeStr(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeStr(36, "data");
+  view.setUint32(40, samples.length * 2, true);
+  for (let i = 0; i < samples.length; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  }
+  return new Blob([buffer], { type: "audio/wav" });
+}
+
+async function toWav16k(blob) {
+  const raw = await blob.arrayBuffer();
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  try {
+    const decoded = await ctx.decodeAudioData(raw);
+    const targetRate = 16000;
+    const offline = new OfflineAudioContext(1, Math.floor(decoded.length * targetRate / decoded.sampleRate), targetRate);
+    const src = offline.createBufferSource();
+    src.buffer = decoded;
+    // Multi-channel input is downmixed by connecting through one node.
+    const downmix = offline.createGain();
+    const splitter = offline.createChannelSplitter(decoded.numberOfChannels);
+    src.connect(splitter);
+    for (let c = 0; c < decoded.numberOfChannels; c++) splitter.connect(downmix, c);
+    downmix.connect(offline.destination);
+    src.start();
+    const rendered = await offline.startRendering();
+    return encodeWav(rendered.getChannelData(0), targetRate);
+  } finally {
+    ctx.close();
+  }
 }
 
 load().then(connect);

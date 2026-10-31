@@ -60,22 +60,33 @@ def extract_transcript(payload: dict) -> str:
         f"Transcribe returned no transcript text (keys: {sorted(payload)})")
 
 
-async def transcribe_audio(audio_bytes: bytes, mime: str = "audio/webm") -> str:
+def _require_wav(audio_bytes: bytes) -> None:
+    if len(audio_bytes) < 16 or not audio_bytes.startswith(b"RIFF") \
+            or b"WAVE" not in audio_bytes[8:16]:
+        raise TranscribeError(
+            "audio must be mono 16-bit WAV at 16 or 24 kHz "
+            "(the browser converts recordings before upload)")
+
+
+async def transcribe_audio(audio_bytes: bytes, mime: str = "audio/wav") -> str:
     """Transcribe one push-to-talk recording. Audio is never written
     to disk by this function; it is sent in memory only."""
     import httpx
 
     if not audio_bytes:
         raise TranscribeError("empty recording")
-    # The API requires two multipart parts: "request" (JSON incl. model)
-    # and "audio" (the recording). A single "file" part is rejected.
+    _require_wav(audio_bytes)
+    # The API requires two multipart parts: "request" (JSON incl. model
+    # and audioEncoding) and "audio" (the recording). A single "file"
+    # part is rejected, and only WAV is accepted for file uploads.
     try:
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
                 f"{TRANSCRIBE_BASE_URL}/asr/transcribe",
                 headers={"Authorization": f"Bearer {_api_key()}"},
-                files={"audio": ("voice.webm", audio_bytes, mime)},
-                data={"request": json.dumps({"model": TRANSCRIBE_MODEL})})
+                files={"audio": ("voice.wav", audio_bytes, "audio/wav")},
+                data={"request": json.dumps({"model": TRANSCRIBE_MODEL,
+                                             "audioEncoding": "WAV"})})
     except TranscribeError:
         raise
     except Exception as e:

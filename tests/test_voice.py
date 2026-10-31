@@ -51,7 +51,9 @@ class WireShapeTest(unittest.TestCase):
         try:
             with mock.patch("httpx.AsyncClient", CapClient):
                 result = asyncio.run(
-                    voice_module.transcribe_audio(b"fake-bytes", "audio/webm"))
+            voice_module.transcribe_audio(
+                b"RIFF\x00\x00\x00\x00WAVEfmt " + b"\x00" * 32,
+                "audio/wav"))
         finally:
             if saved_key is None:
                 del os.environ["MODEL_API_KEY"]
@@ -60,9 +62,24 @@ class WireShapeTest(unittest.TestCase):
         self.assertEqual(result, "turn the reading light on")
         self.assertTrue(seen["url"].endswith("/asr/transcribe"))
         self.assertIn("audio", seen["files"])
-        self.assertEqual(seen["files"]["audio"][0], "voice.webm")
+        self.assertEqual(seen["files"]["audio"][0], "voice.wav")
+        self.assertEqual(seen["files"]["audio"][2], "audio/wav")
         request = _json.loads(seen["data"]["request"])
         self.assertEqual(request["model"], voice_module.TRANSCRIBE_MODEL)
+        self.assertEqual(request["audioEncoding"], "WAV")
+
+    def test_non_wav_rejected_before_any_call(self):
+        async def exploding(*a, **k):
+            raise AssertionError("no HTTP for non-WAV input")
+
+        from unittest import mock
+
+        with mock.patch("httpx.AsyncClient", exploding):
+            for bad in (b"", b"not-a-wav-file-at-all", b"RIFF....fake"):
+                with self.assertRaises(Exception):
+                    import asyncio
+
+                    asyncio.run(voice_module.transcribe_audio(bad))
 
 
 class MatchTest(unittest.TestCase):
