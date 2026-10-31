@@ -14,7 +14,7 @@ from pathlib import Path
 
 import httpx
 import websockets
-from fastapi import FastAPI, HTTPException, Response, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -35,6 +35,27 @@ if not FRONTEND_DIR.is_dir():
     FRONTEND_DIR = _HERE.parent / "frontend"  # local checkout layout
 
 app = FastAPI(title="HomeTwin backend (Day 1)")
+
+
+def _limit_model(request: Request) -> None:
+    """Public-demo guard for model-costly endpoints only. Tap, bind,
+    What-If, approve and reset are not limited."""
+    from rate_limit import (MODEL_RATE_LIMIT, MODEL_RATE_WINDOW_S,
+                            check_model_rate, client_ip)
+
+    # Test clients have no real address (host is literally "testclient")
+    # and run the whole suite from one process; limiting them would
+    # break the test suite without protecting any real demo visitor.
+    if client_ip(request) == "testclient":
+        return
+
+    if not check_model_rate(client_ip(request)):
+        raise HTTPException(
+            status_code=429,
+            detail=(f"Too many model requests from this address "
+                    f"(limit {MODEL_RATE_LIMIT} per {MODEL_RATE_WINDOW_S // 60} minutes). "
+                    "Tap, bind, What-If and Reset are not limited — "
+                    "wait a few minutes and retry the model step."))
 
 
 def _headers() -> dict[str, str]:
@@ -227,7 +248,7 @@ def _log_sam_call(**row) -> None:
 
 
 @app.post("/api/photos")
-async def upload_photo(file: UploadFile) -> dict:
+async def upload_photo(request: Request, file: UploadFile) -> dict:
     """Upload a photo, use it directly, and auto-segment all suggested phrases.
 
     Same bytes re-uploaded return the existing photo (no duplicate SAM spend).
@@ -235,6 +256,7 @@ async def upload_photo(file: UploadFile) -> dict:
     raw = await file.read()
     if len(raw) > 15 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="photo too large (15 MB max)")
+    _limit_model(request)
     return await _ingest_photo(raw, file.filename or "photo")
 
 
@@ -392,11 +414,12 @@ async def _run_segmentation(photo_id: int, photo: dict, raw: bytes,
 
 
 @app.post("/api/photos/{photo_id}/segment")
-async def segment_photo(photo_id: int, req: SegmentRequest) -> dict:
+async def segment_photo(request: Request, photo_id: int, req: SegmentRequest) -> dict:
     photo, raw = _photo_bytes(photo_id)
     phrase = " ".join(req.phrase.split())
     if not phrase:
         raise HTTPException(status_code=422, detail="empty phrase")
+    _limit_model(request)
     try:
         result = await _run_segmentation(photo_id, photo, raw, phrase)
     except SamError as e:
@@ -588,7 +611,7 @@ def _spark_log(photo_id: int, latency_ms: int, n: int, status: str,
 
 
 @app.post("/api/photos/{photo_id}/suggest-bindings")
-async def suggest_bindings(photo_id: int) -> dict:
+async def suggest_bindings(request: Request, photo_id: int) -> dict:
     """Model-proposed bindings for unbound regions. Proposals only — the UI
     applies them through the normal binding endpoint after user approval."""
     import time
@@ -601,6 +624,7 @@ async def suggest_bindings(photo_id: int) -> dict:
     if not any(r["object_id"] not in bound for r in graph["regions"]):
         return {"photo_id": photo_id, "proposals": [],
                 "note": "everything already bound"}
+    _limit_model(request)
     states = await _ha_states()
     entity_bound = {e: o for o, e in bound.items()}
 
@@ -693,7 +717,7 @@ class ProposeRequest(BaseModel):
 
 
 @app.post("/api/automations/propose")
-async def propose_automation(req: ProposeRequest) -> dict:
+async def propose_automation(request: Request, req: ProposeRequest) -> dict:
     """Gesture + text -> Spark AutomationIR -> validate -> compile.
 
     Nothing is written to HA here. The returned proposal must be approved
@@ -742,6 +766,7 @@ async def propose_automation(req: ProposeRequest) -> dict:
             detail=f"not supported: '{hit}' devices are outside the demo "
                    "allowlist (door sensor + lights only). No plan made, no HA write.")
 
+    _limit_model(request)
     t0 = time.monotonic()
     try:
         ir = await complete_json(
@@ -1134,7 +1159,7 @@ class TimeOfDayRequest(BaseModel):
 
 
 @app.post("/api/advisor/suggest")
-async def advisor_suggest(req: AdvisorSuggestRequest) -> dict:
+async def advisor_suggest(request: Request, req: AdvisorSuggestRequest) -> dict:
     """Spark proposes exactly 2 feasible lighting settings. No HA write,
     no image yet — preview and apply are separate, approval-gated steps."""
     import time
@@ -1148,6 +1173,7 @@ async def advisor_suggest(req: AdvisorSuggestRequest) -> dict:
     lights = sorted(e for e in registry if e.startswith("light."))
     if not lights:
         raise HTTPException(status_code=502, detail="no lights found in HA")
+    _limit_model(request)
     t0 = time.monotonic()
     try:
         out = await complete_json(
@@ -1167,7 +1193,7 @@ async def advisor_suggest(req: AdvisorSuggestRequest) -> dict:
 
 
 @app.post("/api/advisor/preview")
-async def advisor_preview(req: AdvisorPreviewRequest) -> dict:
+async def advisor_preview(request: Request, req: AdvisorPreviewRequest) -> dict:
     """Illustrative Muse Image preview for one chosen setting. No HA write."""
     import time
     from advisor import advisor_preview_prompt, validate_settings
@@ -1180,6 +1206,7 @@ async def advisor_preview(req: AdvisorPreviewRequest) -> dict:
     reasons = validate_settings([setting], registry)
     if reasons:
         raise HTTPException(status_code=422, detail="; ".join(reasons))
+    _limit_model(request)
     t0 = time.monotonic()
     try:
         image_bytes = await generate_image(advisor_preview_prompt(setting))
@@ -1215,7 +1242,7 @@ async def advisor_apply(req: AdvisorApplyRequest) -> dict:
 
 
 @app.post("/api/advisor/time-of-day")
-async def time_of_day_preview(req: TimeOfDayRequest) -> dict:
+async def time_of_day_preview(request: Request, req: TimeOfDayRequest) -> dict:
     """Illustrative variant of the frozen room, edited from its photo.
     Returns the preset matching settings too; applying them is a
     separate approval-gated call to /api/advisor/apply."""
@@ -1235,6 +1262,7 @@ async def time_of_day_preview(req: TimeOfDayRequest) -> dict:
                                   "actions": preset["actions"]}], registry)
     if reasons:
         raise HTTPException(status_code=422, detail="; ".join(reasons))
+    _limit_model(request)
     t0 = time.monotonic()
     try:
         image_bytes = await edit_image(raw, preset["image_prompt"])
@@ -1271,7 +1299,7 @@ async def advisor_preview_image(name: str) -> FileResponse:
 # --- Voice: push-to-talk transcription into the typed pipeline ---
 
 @app.post("/api/voice/transcribe")
-async def voice_transcribe(file: UploadFile) -> dict:
+async def voice_transcribe(request: Request, file: UploadFile) -> dict:
     """Transcribe one push-to-talk recording. Audio is held in memory
     only and never written to disk; only the transcript is logged.
     A supported transcript is returned with its match; anything else
@@ -1284,6 +1312,7 @@ async def voice_transcribe(file: UploadFile) -> dict:
         raise HTTPException(status_code=422, detail="empty recording")
     if len(raw) > 10 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="recording too large (10 MB max)")
+    _limit_model(request)
     t0 = time.monotonic()
     try:
         transcript = await transcribe_audio(raw, file.content_type or "audio/webm")

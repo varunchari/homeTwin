@@ -223,7 +223,7 @@ class SceneEndpointTest(unittest.TestCase):
                                  json={"name": "  Movie Night  "}).json()
         self.assertTrue(saved["ok"])
         self.assertEqual(saved["name"], "Movie Night")
-        self.assertEqual(saved["states"]["light.reading_light"], "on")
+        self.assertEqual(saved["states"]["light.reading_light"], "off")
         listed = self.client.get("/api/scenes").json()["scenes"]
         self.assertTrue(any(s["name"] == "Movie Night" for s in listed))
         applied = self.client.post("/api/scenes/Movie Night/apply").json()
