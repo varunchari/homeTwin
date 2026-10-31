@@ -23,7 +23,7 @@ Built Oct 27–Nov 4, 2026 for the Meta Global AI Developer Hackathon (Cerebral 
 
 1. State → action: door opens → light on.
 2. State + condition → action: door opens after sunset → light on.
-3. State → action + delay: door opens → light on, off after a delay. The Automate panel has an explicit delay dropdown (none / 1 minute for live testing / 5 minutes); a selected delay deterministically overrides anything the model inferred from text, so this beat does not depend on Spark parsing "off after a minute". **Status: NOT tested live yet** — compiled and unit-tested only. Live delay beat still to run: Patio Door → Reading Light, auto-off 1 minute, Generate → Approve → open the door (light on) → after 60 s the light turns off by itself, via WebSocket state changes, with no manual tap to turn it off.
+3. State → action + delay: door opens → light on, off after a delay. The Automate panel has an explicit delay dropdown (none / 1 minute for live testing / 5 minutes); a selected delay deterministically overrides anything the model inferred from text, so this beat does not depend on Spark parsing "off after a minute". **Status: auto-off after 60 s still unobserved live.** A sunset + 1-minute rule was deployed live on Oct 30 (proposal #32) and did not fire at night — the sunset condition, not the delay, is under investigation (see `docs/evidence-log.md`). Do not claim the delay beat as live until a no-sunset delay run is observed: door on → light on → after 60 s the light turns off by itself, via WebSocket state changes, with no manual tap to turn it off.
 
 Approval is required before every HA write. Only the patio door may trigger, only lights may be acted on, and only the sun condition is allowed — no locks, alarms, covers or arbitrary YAML, ever.
 
@@ -42,7 +42,9 @@ Both are honest about their limits, and the UI says so on every preview:
 
 ## Voice
 
-Push-to-talk only: hold the Voice button, release to transcribe. The transcript is always shown on screen, and voice is never the only path — the typed Automate box still works.
+Push-to-talk only: hold the Voice button, release to transcribe. The transcript is always shown on screen, and voice is never the only path — the typed Automate box still works. Voice is the preferred input, typing is always available alongside it: not everyone is comfortable speaking to a demo, and typed input makes testing and recording deterministic.
+
+Spoken live verification is still open: the Voice panel and its 4-example hint are live, and the transcribe wire (WAV request/audio/encoding, transcript extraction) was proven against the real API, but a mic → transcript → tap / Automate fill run has not yet been observed in a browser with a microphone. It is not claimed as live-verified here.
 
 - Automation transcripts fill the Automate box (and its source/target dropdowns, from the bound entities). The user still clicks Generate plan, then approves before any HA write — voice is a second input to the exact same Spark → validator → approval → deploy pipeline as typed input.
 - The tap-control transcript shows an explicit button to turn the reading light on. Clicking it is the action, the same live tap as tapping a pin.
@@ -64,7 +66,31 @@ Drawing is kept only where it earns its place: as the manual fallback for creati
 
 The Automate panel offers a second model choice: "Open-weight via Baseten (labelled)". It runs the same prompt, JSON schema, deterministic validator and compiler as the hosted Muse Spark path — only the provider changes (Baseten OpenAI-compatible endpoint, `BASETEN_API_KEY` + `BASETEN_MODEL` server-side only, see `.env.example`). The plan panel labels the provider and model on screen, and `spark_calls.jsonl` logs provider + model per call.
 
-Live Baseten beat to run after a rebuild: same door → light plan with the Baseten option selected, approved and deployed, with the provider label visible. Two things remain open before the $10k Best Open Weight bonus is claimed in the submission: (1) set `BASETEN_MODEL` to the exact string shown in the Baseten dashboard (no unverified dated label is hard-coded; the open path returns 503 until it is set), and (2) run that one labelled live beat. Until both are done, Baseten is a shipped, labelled path — not yet a claimed bonus.
+Live Baseten beats, both observed: proposal #30 (3,474 ms) and an independent reproduction, proposal #31 (3,109 ms), both via `meta-models/muse-spark-open-1026`, both approved and deployed, both firing door → light live via Home Assistant, with the provider and model labelled on screen (see `docs/evidence-log.md`). That evidence supports an open-weight bonus claim at submission; the claim itself is a submission-day decision, not made in this README.
+
+## Reliability (public demo)
+
+- One shared demo, one HA engine. HA has no published port and no admin UI is exposed; the backend is its only client, and no HA or model credentials ever reach the browser.
+- Model-costly endpoints (upload, segment, suggest-bindings, propose, advisor suggest/preview/time-of-day, voice transcribe) are rate-limited per client address (30 per 10 minutes by default, `MODEL_RATE_LIMIT_PER_10MIN` / `MODEL_RATE_WINDOW_S` in `.env.example`). Tap, bind, What-If, approve and reset are not limited, so a limited visitor can still run the demo and retry the model step later. This is a demo guard, not authentication.
+- Live state comes only from HA WebSocket `state_changed` events, never optimistically. If the socket drops, the UI shows "Reconnecting…" and reconnects after 2 seconds.
+- The frozen demo photo is cached and labelled as such ("Photo 7 already known — loaded its regions directly"); a re-uploaded photo reuses its regions without re-spending SAM. A fresh photo on video is the one fresh SAM run.
+- Reset works from a fresh session: it turns everything off, deletes deployed `hometwin_*` rules, and clears bindings and history, leaving the demo usable again immediately.
+- Advisor and time-of-day live round trips (suggest → preview → apply, all three presets) are still to be verified live after a rebuild; they are described above as shipped code, not claimed as live-verified beats.
+
+## Roadmap (future only — not shipped)
+
+The following are planned, in future tense, and are not present-tense claims about this demo:
+
+- P2: automation debugger, conflict detection, Time Machine, Scene Composer, energy advisor, accessibility advisor, foundational spatial memory.
+- P3: persistent multi-photo tracking, guest mode, Autopilot, multi-room mapping, Meta glasses / XR, advanced spatial memory, physical deployment path (Matter / Zigbee / Wi-Fi, swapping entity IDs, same API).
+- Stretch, not shipped: light-only active binding, Muse Gadgets Linux SDK (capped, read-only first), advanced What-If.
+
+## Still open before submission
+
+- HTTPS domain for the demo (Caddy already terminates 80/443; this is a domain + DNS change).
+- Sunset-condition live fire (see the delay status above and `docs/evidence-log.md`).
+- Spoken voice live verification (see Voice above).
+- Delete `docs/implementation-plan.md` before final submission, as noted at the top.
 
 ## Quick start (Lightsail host)
 
