@@ -49,6 +49,15 @@ def extract_transcript(payload: dict) -> str:
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip()
+        if isinstance(value, dict):
+            nested = value.get("text") or value.get("transcript")
+            if isinstance(nested, str) and nested.strip():
+                return nested.strip()
+    for turn in payload.get("turns") or []:
+        if isinstance(turn, dict):
+            value = turn.get("text")
+            if isinstance(value, str) and value.strip():
+                return value.strip()
     data = payload.get("data")
     if isinstance(data, list) and data:
         first = data[0] or {}

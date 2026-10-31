@@ -121,6 +121,17 @@ class TranscriptShapeTest(unittest.TestCase):
         self.assertEqual(extract_transcript({"transcript": "hello"}), "hello")
         self.assertEqual(extract_transcript({"data": [{"text": "hello"}]}), "hello")
 
+    def test_live_api_shapes(self):
+        # Observed 2026-10-29: real responses carry transcript/turns keys.
+        self.assertEqual(
+            extract_transcript({"transcript": {"text": "hello"}}), "hello")
+        self.assertEqual(
+            extract_transcript({"turns": [{"text": "hello"}]}), "hello")
+        # Toneless audio yields no text: still raises.
+        with self.assertRaises(voice_module.TranscribeError):
+            extract_transcript({"transcript": "", "turns": [],
+                                "audioDurationMs": 1000})
+
     def test_unknown_shape_raises(self):
         with self.assertRaises(voice_module.TranscribeError):
             extract_transcript({"data": [{}]})
