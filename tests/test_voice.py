@@ -18,6 +18,53 @@ import voice as voice_module  # noqa: E402
 from voice import extract_transcript, match_utterance, normalize_transcript  # noqa: E402
 
 
+class WireShapeTest(unittest.TestCase):
+    def test_request_and_audio_parts(self):
+        import asyncio
+        import json as _json
+        from unittest import mock
+
+        seen = {}
+
+        class CapResp:
+            status_code = 200
+
+            def json(self):
+                return {"text": "turn the reading light on"}
+
+        class CapClient:
+            def __init__(self, *a, **k):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                return False
+
+            async def post(self, url, headers=None, files=None, data=None):
+                seen.update(url=url, files=files, data=data)
+                return CapResp()
+
+        saved_key = os.environ.get("MODEL_API_KEY")
+        os.environ["MODEL_API_KEY"] = "test-key"
+        try:
+            with mock.patch("httpx.AsyncClient", CapClient):
+                result = asyncio.run(
+                    voice_module.transcribe_audio(b"fake-bytes", "audio/webm"))
+        finally:
+            if saved_key is None:
+                del os.environ["MODEL_API_KEY"]
+            else:
+                os.environ["MODEL_API_KEY"] = saved_key
+        self.assertEqual(result, "turn the reading light on")
+        self.assertTrue(seen["url"].endswith("/asr/transcribe"))
+        self.assertIn("audio", seen["files"])
+        self.assertEqual(seen["files"]["audio"][0], "voice.webm")
+        request = _json.loads(seen["data"]["request"])
+        self.assertEqual(request["model"], voice_module.TRANSCRIBE_MODEL)
+
+
 class MatchTest(unittest.TestCase):
     def test_all_four_supported(self):
         cases = [

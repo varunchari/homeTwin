@@ -1,5 +1,4 @@
 """Voice: push-to-talk transcription into the existing typed pipeline.
-
 Voice is a second input, never a second pipeline. A transcript that
 matches one of the supported utterances below is either:
 - copied into the Automate instruction box (automation patterns), so
@@ -23,6 +22,7 @@ it cannot pass the exit test for this feature.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 
@@ -67,13 +67,15 @@ async def transcribe_audio(audio_bytes: bytes, mime: str = "audio/webm") -> str:
 
     if not audio_bytes:
         raise TranscribeError("empty recording")
+    # The API requires two multipart parts: "request" (JSON incl. model)
+    # and "audio" (the recording). A single "file" part is rejected.
     try:
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
                 f"{TRANSCRIBE_BASE_URL}/asr/transcribe",
                 headers={"Authorization": f"Bearer {_api_key()}"},
-                files={"file": ("voice.webm", audio_bytes, mime)},
-                data={"model": TRANSCRIBE_MODEL})
+                files={"audio": ("voice.webm", audio_bytes, mime)},
+                data={"request": json.dumps({"model": TRANSCRIBE_MODEL})})
     except TranscribeError:
         raise
     except Exception as e:
