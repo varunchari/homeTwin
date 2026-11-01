@@ -438,6 +438,33 @@ document.getElementById("whatif-btn").addEventListener("click", async () => {
       : `SIMULATED: no fire — ${body.condition_note}.`)
     : `What-If failed: ${body.detail || res.status}`;
   whatifView.appendChild(div);
+  // Timeline: the same verdict drawn over time, from the compiled rule —
+  // door event, light on, and auto-off when the rule carries a delay.
+  if (res.ok) {
+    const step = (body.action && body.action[0]) || {};
+    const target = step.target ? prettyEntity(step.target.entity_id) : "the light";
+    const tl = document.createElement("ol");
+    tl.className = "timeline";
+    const at = (when, what) => {
+      const li = document.createElement("li");
+      const t = document.createElement("strong");
+      t.textContent = when;
+      li.appendChild(t);
+      li.appendChild(document.createTextNode(` — ${what}`));
+      tl.appendChild(li);
+    };
+    if (!body.trigger_match) {
+      at("never", "door stays shut, so the rule never triggers");
+    } else if (!body.fires) {
+      at("now", "door opens");
+      at("blocked", `${body.condition_note}; ${target} stays OFF`);
+    } else {
+      at("now", "door opens");
+      at("now", `${target} turns ON`);
+      if (body.delay_s) at(`+${body.delay_s}s`, `${target} turns OFF (auto-off)`);
+    }
+    div.appendChild(tl);
+  }
   if (res.ok) whatifDone = true;
   updateSteps();
 });
