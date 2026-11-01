@@ -257,3 +257,8 @@ body.drawing #photo-wrap { cursor: crosshair; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+/* Guest view (sliced): tap only. Hidden sections are also blocked
+   server-side for requests carrying the guest header (see app.py). */
+body.guest .guest-hide { display: none !important; }
+.guest-banner { background: #eef4ff; border-bottom: 1px solid #bcd; padding: 8px 16px; font-size: 14px; }
