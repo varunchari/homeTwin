@@ -54,3 +54,8 @@ Baseten A/B rows (Oct 30 only): record model string as shown in the Baseten dash
 - Scene Composer OBSERVED: saved "Live Check" (floor off, string off, reading on); apply returned all three actions; HA states matched.
 - Sunset setup: reset cleared hometwin_34, history, bindings, 1 moved pin, 1 scene; scrubbed stale hometwin_33 ghost (entity_registry -2, restore_state -10); proposal #35, hosted muse-spark-1.3, 4570 ms, after-sunset condition; approved hometwin_35; What-If day=False / night=True; sun.sun above_horizon. Live sunset fire still pending local sunset (~01:00 UTC / 18:00 PDT).
 - Deploy: final build synced to Lightsail with host .env preserved; backend rebuilt; HA restarted; Caddy serves versioned UI shell (200, 8249 bytes with Host header).
+## 2026-11-01 - Sunset live-fire attempt 1 (no fire observed, scheduler fired late)
+- The 18:10 PDT one-shot check actually ran ~08:42 PDT Nov 1 (host clock 2026-11-01T15:42Z); sun.sun was still above_horizon (next setting 2026-11-02T00:58Z).
+- Tap simulated door on; reading light stayed off across 12 x 10 s polls — correct daytime non-fire, consistent with What-If day=False, but NOT the sunset proof.
+- Re-armed afterwards: door tapped back off; rule hometwin_35 still on; door off, reading off.
+- Second one-shot check scheduled for 18:10 PDT Nov 1 with an off-to-on guard.
