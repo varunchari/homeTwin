@@ -1,5 +1,21 @@
 // Day 1: render HA states, live-update ONLY from WebSocket state_changed
 // events relayed by the backend. No optimistic UI.
+const isGuest = new URLSearchParams(location.search).get("guest") === "1";
+if (isGuest) {
+  document.body.classList.add("guest");
+  const banner = document.getElementById("guest-banner");
+  if (banner) banner.hidden = false;
+  const link = document.getElementById("guest-link");
+  if (link) { link.textContent = "Exit guest view"; link.href = "/"; }
+  // Every fetch from a guest page declares itself, so the backend guard
+  // (app.py) blocks authoring calls even if a hidden panel is re-enabled.
+  const _fetch = window.fetch.bind(window);
+  window.fetch = (url, init = {}) => {
+    const headers = new Headers(init.headers || {});
+    headers.set("X-HomeTwin-Guest", "1");
+    return _fetch(url, { ...init, headers });
+  };
+}
 const statusEl = document.getElementById("status");
 const listEl = document.getElementById("entities");
 const states = new Map();
@@ -1075,3 +1091,8 @@ async function toWav16k(blob) {
 }
 
 load().then(connect);
+if (isGuest) {
+  // Guests cannot upload or segment, so start them on the frozen demo room.
+  const demoBtn = document.getElementById("demo-btn");
+  if (demoBtn) demoBtn.click();
+}

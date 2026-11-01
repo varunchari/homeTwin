@@ -20,23 +20,25 @@
       <span class="ambient-item"><span id="auto-count">—</span></span>
     </div>
     <div class="topbar-right">
-      <button id="reset-btn" class="btn" title="Turn everything off and delete deployed automations">Reset</button>
+      <a id="guest-link" class="btn" href="/?guest=1">Guest view</a>
+      <button id="reset-btn" class="btn guest-hide" title="Turn everything off and delete deployed automations">Reset</button>
       <div id="status" class="live-pill">Connecting…</div>
     </div>
   </header>
 
+  <div id="guest-banner" class="guest-banner" hidden>Guest view — tap only. You can turn bound lights and devices on/off by tapping their pins. You cannot bind, automate, use voice or advisor, rearrange, save scenes, or reset. <a href="/">Exit guest view</a></div>
   <main class="layout">
     <section class="canvas-card">
       <div class="canvas-toolbar">
-        <label class="file-btn">Upload photo
+        <label class="file-btn guest-hide">Upload photo
           <input type="file" id="photo-input" accept="image/jpeg,image/png" hidden />
         </label>
         <button id="demo-btn" class="btn">Use demo room</button>
-        <input id="phrase-input" placeholder="Concept phrase — e.g. lamp" />
-        <button id="segment-btn" class="btn primary">Segment</button>
-        <button id="draw-btn" class="btn">Draw region</button>
+        <input id="phrase-input" class="guest-hide" placeholder="Concept phrase — e.g. lamp" />
+        <button id="segment-btn" class="btn primary guest-hide">Segment</button>
+        <button id="draw-btn" class="btn guest-hide">Draw region</button>
       </div>
-      <div id="phrase-chips" class="chips"></div>
+      <div id="phrase-chips" class="chips guest-hide"></div>
       <div id="photo-wrap">
         <img id="photo" alt="Room photo" hidden />
         <div id="regions"></div>
@@ -46,7 +48,7 @@
       <section id="sheet" class="sheet" hidden>
         <button id="sheet-close" class="sheet-close" title="Deselect">×</button>
         <div id="selected-info">Tap a pin in the photo.</div>
-        <div id="bind-row">
+        <div id="bind-row" class="guest-hide">
           <select id="entity-select" title="Bind to HA entity"></select>
           <button id="bind-btn" class="btn">Bind</button>
           <button id="unbind-btn" class="btn">Unbind</button>
@@ -55,12 +57,12 @@
     </section>
 
     <aside class="panel">
-      <section>
+      <section class="guest-hide">
         <h2>2 · Bind</h2>
         <button id="suggest-btn" class="btn primary" disabled title="Choose a photo first">Suggest bindings</button>
         <ul id="proposal-list" class="proposals"></ul>
       </section>
-      <section>
+      <section class="guest-hide">
         <h2>4 · Automate</h2>
         <div id="auto-row">
           <select id="source-select" title="Trigger region"></select>
@@ -83,7 +85,7 @@
         <button id="plan-btn" class="btn primary" disabled title="Bind a region first">Generate plan</button>
         <div id="plan-view"></div>
       </section>
-      <section>
+      <section class="guest-hide">
         <h2>Voice</h2>
         <p class="muted">Push-to-talk only. The transcript is always shown below, and voice is never the only path — the typed Automate box above still works. No spoken replies: transcription is speech-to-text only. Audio is sent once for transcription and is not stored.</p>
         <button id="voice-btn" class="btn primary">Hold to talk</button>
@@ -95,7 +97,7 @@
           "When the door opens after sunset, turn the string lights on" ·
           "When the door opens, turn the reading light on, off after a minute"</p>
       </section>
-      <section>
+      <section class="guest-hide">
         <h2>5 · What-If <span class="sim-tag">simulated</span></h2>
         <div id="whatif-row">
           <select id="whatif-proposal" title="Automation proposal"></select>
@@ -111,7 +113,7 @@
         <button id="whatif-btn" class="btn" disabled title="Generate a plan first">Preview</button>
         <div id="whatif-view"></div>
       </section>
-      <section>
+      <section class="guest-hide">
         <h2>6 · Design Advisor</h2>
         <input id="advisor-text" placeholder="Request — e.g. cozy evening" value="cozy evening" />
         <button id="advisor-btn" class="btn primary">Suggest settings</button>
@@ -131,7 +133,7 @@
         </div>
         <div id="tod-view"></div>
       </section>
-      <section>
+      <section class="guest-hide">
         <h2>7 · Rearrange</h2>
         <p class="muted">A proposed rearrangement, not an actuation: the pin moves, the light stays put, tap keeps working. Decline changes nothing.</p>
         <div id="move-row">
@@ -141,7 +143,7 @@
         <button id="move-btn" class="btn primary" disabled title="Bind a lamp first">Propose move</button>
         <div id="move-view"></div>
       </section>
-      <section>
+      <section class="guest-hide">
         <h2>8 · Scenes</h2>
         <div id="scene-row">
           <input id="scene-name" placeholder="Scene name — e.g. movie night" maxlength="40" />

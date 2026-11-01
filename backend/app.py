@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 from pathlib import Path
 
 import httpx
@@ -35,6 +36,31 @@ if not FRONTEND_DIR.is_dir():
     FRONTEND_DIR = _HERE.parent / "frontend"  # local checkout layout
 
 app = FastAPI(title="HomeTwin backend (Day 1)")
+
+
+@app.middleware("http")
+async def _guest_guard(request: Request, call_next):
+    """Guest view (sliced, NOT an auth boundary): a page opened with
+    ?guest=1 sends X-HomeTwin-Guest: 1 on every fetch. Such requests may
+    only read state, load the demo room, and tap a bound pin. Everything
+    else — bind, suggest, automate, approve, What-If, advisor, voice,
+    rearrange, scenes, reset, upload, segment — is refused 403 before any
+    HA write or model call. This is a declared-guest view, not
+    authentication: the public demo has no accounts, so anyone who omits
+    the header is treated as the host. Do not present it as access control."""
+    if request.headers.get("X-HomeTwin-Guest") == "1":
+        path, method = request.url.path, request.method
+        allowed = (
+            path == "/health" or path == "/" or path.startswith("/static/")
+            or path == "/api/entities" or path == "/api/photos/demo"
+            or (method == "GET" and re.match(r"^/api/photos/\d+/(graph|image)$", path))
+            or (method == "POST" and re.match(r"^/api/photos/\d+/tap$", path))
+        )
+        if not allowed:
+            return Response(
+                content='{"detail": "Guest view is tap-only."}',
+                status_code=403, media_type="application/json")
+    return await call_next(request)
 
 
 def _limit_model(request: Request) -> None:

@@ -68,6 +68,10 @@ The Automate panel offers a second model choice: "Open-weight via Baseten (label
 
 Live Baseten beats, both observed: proposal #30 (3,474 ms) and an independent reproduction, proposal #31 (3,109 ms), both via `meta-models/muse-spark-open-1026`, both approved and deployed, both firing door → light live via Home Assistant, with the provider and model labelled on screen (see `docs/evidence-log.md`). That evidence supports an open-weight bonus claim at submission; the claim itself is a submission-day decision, not made in this README.
 
+## Guest view (sliced, tap-only)
+
+`/?guest=1` opens a tap-only view: the demo room photo and bound pins, tap to turn lights/devices on/off, live state via WebSocket. Bind, Automate, Voice, What-If, Advisor, Rearrange, Scenes, and Reset are hidden, and requests carrying `X-HomeTwin-Guest: 1` are refused 403 by the backend before any HA write or model call. Sliced deliberately: no accounts, no expiry, no per-guest permissions — and not authentication, since the public demo has no accounts. A guest is someone who can use the room, not someone who can change the house.
+
 ## Reliability (public demo)
 
 - One shared demo, one HA engine. HA has no published port and no admin UI is exposed; the backend is its only client, and no HA or model credentials ever reach the browser.
