@@ -71,6 +71,18 @@ class SnapshotStoreTest(unittest.TestCase):
     def test_empty_record_is_noop(self):
         self.assertEqual(store_module.record_snapshot([]), 0)
 
+    def test_state_at_picks_latest_before_ts(self):
+        now = time.time()
+        store_module.record_snapshot([(now - 300, "mem-tm-lamp", "off"),
+                                      (now - 100, "mem-tm-lamp", "on"),
+                                      (now - 200, "mem-tm-door", "on")])
+        room = store_module.state_at(now - 150)
+        self.assertEqual(room["mem-tm-lamp"]["state"], "off")
+        self.assertEqual(room["mem-tm-door"]["state"], "on")
+        room = store_module.state_at(now)
+        self.assertEqual(room["mem-tm-lamp"]["state"], "on")
+        self.assertEqual(store_module.state_at(1), {})
+
 
 class MemoryRecorderTest(unittest.TestCase):
     @classmethod
@@ -118,6 +130,18 @@ class MemoryRecorderTest(unittest.TestCase):
         body = self.client.get("/api/history",
                                params={"minutes": 1, "limit": 2}).json()
         self.assertLessEqual(len(body["snapshots"]), 2)
+
+    def test_state_at_endpoint(self):
+        import time as time_module
+
+        asyncio.run(proxy._record_snapshot_once())
+        body = self.client.get("/api/state-at",
+                               params={"ts": time_module.time()}).json()
+        self.assertEqual(body["states"]["light.reading_light"]["state"], "on")
+        r = self.client.get("/api/state-at",
+                            params={"ts": time_module.time() + 3600})
+        self.assertEqual(r.status_code, 422)
+        self.assertIn("future", r.json()["detail"])
 
 
 if __name__ == "__main__":

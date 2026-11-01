@@ -35,6 +35,7 @@
   </ol></nav>
 
   <div id="guest-banner" class="guest-banner" hidden>Guest view — tap only. You can turn bound lights and devices on/off by tapping their pins. You cannot bind, automate, use voice or advisor, rearrange, save scenes, or reset. <a href="/">Exit guest view</a></div>
+  <div id="tm-banner" class="tm-banner" hidden></div>
   <main class="layout">
     <section class="canvas-card">
       <div class="canvas-toolbar">
@@ -158,6 +159,16 @@
           <button id="scene-save-btn" class="btn">Save current lights</button>
         </div>
         <ul id="scene-list" class="proposals"></ul>
+      </section>
+      <section class="guest-hide">
+        <h2>9 · Time machine</h2>
+        <p class="muted">The room as it was: pins, Devices, and counts show recorded device states at the chosen time. The photo itself is unchanged — states are memory, pixels are not. Controls lock while viewing the past.</p>
+        <div id="tm-row">
+          <input id="tm-when" type="datetime-local" title="Date and time to revisit" />
+          <button id="tm-view-btn" class="btn primary">View past</button>
+          <button id="tm-live-btn" class="btn" hidden>Back to live</button>
+        </div>
+        <div id="tm-view"></div>
       </section>
       <section>
         <h2>Regions</h2>

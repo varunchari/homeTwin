@@ -23,7 +23,7 @@ const stateAttrs = new Map(); // entity_id -> HA attributes (last_triggered, …
 
 function render() {
   listEl.innerHTML = "";
-  for (const [id, st] of states) {
+  for (const [id, st] of shownStates()) {
     if (id.startsWith("input_boolean.")) continue; // helpers back templates; not devices
     const li = document.createElement("li");
     const name = document.createElement("span");
@@ -45,7 +45,7 @@ function render() {
     listEl.appendChild(li);
   }
   // Ambient strip: sun + lights-on at a glance. Pins follow live state too.
-  const sun = states.get("sun.sun");
+  const sun = shownStates().get("sun.sun");
   const sunState = document.getElementById("sun-state");
   const sunDot = document.getElementById("sun-dot");
   if (sunState) {
@@ -53,10 +53,10 @@ function render() {
     sunState.textContent = sun ? (day ? "Daytime" : "Night") : "—";
     if (sunDot) sunDot.className = "dot" + (sun ? (day ? " day" : " night") : "");
   }
-  const onCount = [...states].filter(([id, st]) => id.startsWith("light.") && st === "on").length;
+  const onCount = [...shownStates()].filter(([id, st]) => id.startsWith("light.") && st === "on").length;
   const lightsOn = document.getElementById("lights-on");
   if (lightsOn) lightsOn.textContent = `${onCount} light${onCount === 1 ? "" : "s"} on`;
-  const autoCount = [...states.keys()].filter((id) => id.startsWith("automation.")).length;
+  const autoCount = [...shownStates().keys()].filter((id) => id.startsWith("automation.")).length;
   const autoCountEl = document.getElementById("auto-count");
   if (autoCountEl) autoCountEl.textContent = `${autoCount} automation${autoCount === 1 ? "" : "s"}`;
   if (typeof updatePins === "function") updatePins();
@@ -88,7 +88,7 @@ function connect() {
     if (st) {
       states.set(st.entity_id, st.state);
       stateAttrs.set(st.entity_id, st.attributes || {});
-      render();
+      if (!timeTravel) render(); // live keeps collecting; the past view stays frozen
     }
   };
 }
@@ -133,6 +133,16 @@ function fmtFired(iso) {
 // steps stay disabled until their prerequisites exist.
 let tapped = false;
 let whatifDone = false;
+// Time machine: viewing past device states overlaid on the frozen photo.
+// The photo itself is never relit — states are memory, pixels are not.
+let timeTravel = false;
+const pastView = new Map(); // entity_id -> past state while time-traveling
+function shownStates() {
+  if (!timeTravel) return states;
+  const merged = new Map(states);
+  for (const [id, st] of pastView) merged.set(id, st);
+  return merged;
+}
 function updateSteps() {
   const rail = document.getElementById("steps");
   if (!rail || typeof whatifProposal === "undefined") return;
@@ -197,6 +207,7 @@ function renderRegions(regions) {
       if (drawing) return;
       ev.stopPropagation();
       selectRegion(r.object_id);
+      if (timeTravel) { say("Viewing the past — Back to live to control devices."); return; }
       if (bindings[r.object_id]) await tapSelected();
     };
     pin.addEventListener("click", activate);
@@ -230,7 +241,7 @@ function updatePins() {
   for (const pin of regionsEl.querySelectorAll(".pin")) {
     const entity = bindings[pin.dataset.oid];
     pin.textContent = shortPinLabel(pin.dataset.oid);
-    pin.classList.toggle("on", !!entity && states.get(entity) === "on");
+    pin.classList.toggle("on", !!entity && shownStates().get(entity) === "on");
     pin.classList.toggle("selected", pin.dataset.oid === selectedId);
   }
   for (const box of regionsEl.querySelectorAll(".box")) {
@@ -238,7 +249,7 @@ function updatePins() {
   }
   for (const screen of regionsEl.querySelectorAll(".screen")) {
     const entity = bindings[screen.dataset.oid];
-    screen.classList.toggle("on", !!entity && states.get(entity) === "on");
+    screen.classList.toggle("on", !!entity && shownStates().get(entity) === "on");
   }
   // Region list mirrors live state: ON/OFF for bound regions, source tag otherwise.
   for (const li of regionList.querySelectorAll("li[data-oid]")) {
@@ -249,7 +260,7 @@ function updatePins() {
       badge.textContent = li.className.includes("manual") ? "hand-drawn" : "unbound";
       badge.classList.remove("on");
     } else {
-      const on = states.get(entity) === "on";
+      const on = shownStates().get(entity) === "on";
       badge.textContent = on ? "ON" : "OFF";
       badge.classList.toggle("on", on);
     }
@@ -487,6 +498,7 @@ document.getElementById("whatif-btn").addEventListener("click", async () => {
 
 async function tapSelected() {
   if (!photoId || !selectedId) return;
+  if (timeTravel) { say("Viewing the past — Back to live to control devices."); return; }
   const res = await fetch(`/api/photos/${photoId}/tap`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -524,7 +536,7 @@ function syncEntitySelect() {
   if (!entitySelect) return;
   const keep = selectedId && bindings[selectedId] ? bindings[selectedId] : entitySelect.value;
   entitySelect.innerHTML = "";
-  for (const [id, st] of states) {
+  for (const [id, st] of shownStates()) {
     const domain = id.split(".")[0];
     if (domain !== "light" && domain !== "binary_sensor" &&
         !BINDABLE_INPUTS.includes(id)) continue;
@@ -736,6 +748,71 @@ document.getElementById("scene-save-btn").addEventListener("click", async () => 
   await refreshScenes();
 });
 refreshScenes();
+
+// Time machine: view recorded states, locks controls while active.
+const TM_LOCK_IDS = ["suggest-btn", "plan-btn", "whatif-btn", "voice-btn",
+  "advisor-btn", "tod-btn", "move-btn", "scene-save-btn", "bind-btn",
+  "unbind-btn", "segment-btn", "draw-btn", "reset-btn", "demo-btn", "tm-view-btn"];
+function lockControls(lock) {
+  for (const id of TM_LOCK_IDS) {
+    const el = document.getElementById(id);
+    if (el) el.disabled = lock;
+  }
+  const photoInput = document.getElementById("photo-input");
+  if (photoInput) photoInput.disabled = lock;
+  if (!lock) {
+    document.getElementById("suggest-btn").disabled = !photoId;
+    if (photoId) { refreshGraph(); refreshProposals(); }
+  }
+}
+document.getElementById("tm-view-btn").addEventListener("click", async () => {
+  const input = document.getElementById("tm-when");
+  if (!input.value) { say("Pick a date and time first."); return; }
+  const ts = Math.floor(new Date(input.value).getTime() / 1000);
+  if (Number.isNaN(ts)) { say("That date did not parse."); return; }
+  const res = await fetch(`/api/state-at?ts=${ts}`);
+  const body = await res.json();
+  const tmView = document.getElementById("tm-view");
+  tmView.innerHTML = "";
+  if (!res.ok) {
+    const div = document.createElement("div");
+    div.className = "plan rejected";
+    div.textContent = `Time travel failed: ${body.detail || res.status}`;
+    tmView.appendChild(div);
+    return;
+  }
+  pastView.clear();
+  for (const [id, s] of Object.entries(body.states)) pastView.set(id, s.state);
+  timeTravel = true;
+  lockControls(true);
+  const when = fmtFired(new Date(body.ts * 1000).toISOString());
+  const banner = document.getElementById("tm-banner");
+  banner.textContent = `Viewing the past (${when}): pins, Devices, and counts show recorded states. The photo is unchanged — states are memory, pixels are not. `;
+  const back = document.createElement("button");
+  back.className = "btn";
+  back.textContent = "Back to live";
+  back.addEventListener("click", exitPast);
+  banner.appendChild(back);
+  banner.hidden = false;
+  document.getElementById("tm-live-btn").hidden = false;
+  const div = document.createElement("div");
+  div.className = "plan";
+  div.textContent = `Room as it was at ${when} (${pastView.size} devices remembered). Controls are locked.`;
+  tmView.appendChild(div);
+  render();
+  say("Viewing the past — controls locked until you go back to live.");
+});
+async function exitPast() {
+  timeTravel = false;
+  pastView.clear();
+  document.getElementById("tm-banner").hidden = true;
+  document.getElementById("tm-view").innerHTML = "";
+  document.getElementById("tm-live-btn").hidden = true;
+  lockControls(false);
+  await load();
+  say("Back to live.");
+}
+document.getElementById("tm-live-btn").addEventListener("click", exitPast);
 
 document.getElementById("reset-btn").addEventListener("click", async () => {
   const btn = document.getElementById("reset-btn");

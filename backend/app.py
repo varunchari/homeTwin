@@ -262,6 +262,27 @@ async def history(entity_id: str | None = None, minutes: int = 60,
     return {"snapshots": store_module.snapshot_history(entity_id, since, limit)}
 
 
+@app.get("/api/state-at")
+async def state_at(ts: float) -> dict:
+    """The room as it was at a Unix timestamp: latest snapshot per entity.
+
+    Past only — future timestamps are rejected, and an empty memory (the
+    recorder hasn't run yet) says so instead of inventing states.
+    """
+    import time
+    import store as store_module
+
+    now = time.time()
+    if ts > now + 60:
+        raise HTTPException(status_code=422, detail="cannot view the future")
+    room = store_module.state_at(min(ts, now))
+    if not room:
+        raise HTTPException(
+            status_code=404,
+            detail="no snapshots yet — memory starts when the recorder first runs")
+    return {"ts": ts, "states": room}
+
+
 @app.websocket("/ws")
 async def ws_feed(ws: WebSocket) -> None:
     await ws.accept()

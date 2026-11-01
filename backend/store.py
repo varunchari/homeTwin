@@ -423,6 +423,23 @@ def snapshot_history(entity_id: str | None = None, since_ts: float | None = None
         conn.close()
 
 
+def state_at(ts: float) -> dict[str, dict]:
+    """Latest snapshot per entity at or before ts: the room as it was.
+
+    Relies on SQLite's rule that bare columns in a MIN/MAX aggregate come
+    from the row holding that extreme — so state matches MAX(ts).
+    """
+    conn = connect()
+    try:
+        rows = conn.execute(
+            "SELECT entity_id, state, MAX(ts) AS mts FROM snapshots "
+            "WHERE ts<=? GROUP BY entity_id", (ts,)).fetchall()
+        return {r["entity_id"]: {"state": r["state"], "ts": r["mts"]}
+                for r in rows}
+    finally:
+        conn.close()
+
+
 def prune_snapshots(before_ts: float) -> int:
     """Delete snapshots older than a cutoff. Returns rows removed."""
     conn = connect()
