@@ -54,6 +54,10 @@ Push-to-talk only: hold the Voice button, release to transcribe. The transcript 
 - No spoken replies: Voice Transcribe is speech-to-text only. Audio is sent once for transcription and is not stored; only the transcript text is logged for evidence.
 - Integration freeze from here: no new models, SDKs, or services after voice, except the already-planned stretch items if time remains.
 
+## Gadgets (conceptual proof of concept)
+
+No Muse-app "ask" support is added, deliberately: asking the Muse app to control this home would need a paired Pi/Linux gadget (SDK token + Bluetooth pairing), which a cloud demo cannot do. Instead, the demo's Gadgets panel is a conceptual proof of concept with real HA state: it runs, as a simulation, the same `hometwin.status` (read-only) and `hometwin.light.set` (string lights only, allowlisted) commands defined in `gadgets/commands.d/` for a real Pi gadget, and the browser reflects any HA change via WebSocket. It is labelled conceptual in the UI and must never be presented as a paired Muse connection. See `gadgets/README.md` for the full SDK research, pairing steps, and what a paired run would still need to prove.
+
 ## Why dropdowns, not draw-an-arrow, for automation
 
 You are right: dropdowns are the better UX here, and more controlled. Automate uses two dropdowns (trigger region → action region) limited to bound regions only, plus an instruction box and the delay/model dropdowns above. A drawn arrow would have to be parsed into source, target and intent — ambiguous at the edges, fragile under a slightly off drag, and hard to validate before the model runs. Dropdowns make the choice explicit, auditable and re-runnable, which is what a demo and a judge need.

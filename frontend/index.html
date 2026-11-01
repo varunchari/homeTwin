@@ -96,8 +96,8 @@
           "When the door opens, turn the reading light on, off after a minute"</p>
       </section>
       <section>
-        <h2>Gadgets <span class="sim-tag">simulated</span></h2>
-        <p class="muted">Simulated invocation of the Muse Gadgets Linux commands in <code>gadgets/commands.d/</code> — <code>hometwin.status</code> (read-only) and <code>hometwin.light.set</code> (string lights only). A paired Muse call from a real Pi gadget has <b>not</b> been verified; that needs an SDK token, a Pi/Linux gadget, and phone pairing (see <code>gadgets/README.md</code>). No gadget credential is in this browser or repo.</p>
+        <h2>Gadgets <span class="sim-tag">conceptual proof of concept</span></h2>
+        <p class="muted">Conceptual proof of concept, not a paired Muse app connection. You cannot ask the Muse app to control this home from here — that needs a paired Pi/Linux gadget (SDK token + Bluetooth pairing), which this cloud demo cannot do. This panel shows, with real HA state, what that ask <i>would</i> do, via the Muse Gadgets Linux commands in <code>gadgets/commands.d/</code> — <code>hometwin.status</code> (read-only) and <code>hometwin.light.set</code> (string lights only), invoked here as a simulation. No gadget credential is in this browser or repo.</p>
         <button id="gadget-status-btn" class="btn">Gadget read: HomeTwin status</button>
         <div id="gadget-status-view" class="plan" hidden></div>
         <div id="gadget-light-row">

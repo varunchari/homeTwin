@@ -1,5 +1,14 @@
 # Muse Gadgets — HomeTwin spike (read-only first)
 
+> **Decision (Varun, 2026-10-31): the demo is conceptual with a
+> virtual proof of concept.** There is no point adding Muse-app
+> "ask" support on top of this branch, because a paired connection
+> cannot be made from this cloud demo (Bluetooth pairing required;
+> Lightsail and this VM have no Bluetooth radio). The Gadgets panel
+> below is the virtual proof of concept: real HA state, simulated
+> gadget invocation, labelled as conceptual — never presented as
+> "ask Muse in the app to control this home".
+
 ## What this is, and what it is not
 
 Muse Gadgets is **not** a web UI widget SDK. It is Meta's open-source

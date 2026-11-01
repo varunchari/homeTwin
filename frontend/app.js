@@ -950,11 +950,11 @@ if (gadgetStatusBtn) {
       return;
     }
     const lights = body.lights.map((l) => `${prettyEntity(l.entity_id)}: ${l.state}`).join(", ");
-    gadgetStatusView.textContent = `Gadget read (simulated, hometwin.status): ${lights}; patio door: ${body.patio_door}; sun: ${body.sun}.`;
+    gadgetStatusView.textContent = `Gadget read (conceptual PoC, simulated, hometwin.status): ${lights}; patio door: ${body.patio_door}; sun: ${body.sun}.`;
   });
   const gadgetLight = (on) => async () => {
     gadgetLightView.hidden = false;
-    gadgetLightView.textContent = `Gadget command (simulated, hometwin.light.set): string lights ${on ? "on" : "off"}…`;
+    gadgetLightView.textContent = `Gadget command (conceptual PoC, simulated, hometwin.light.set): string lights ${on ? "on" : "off"}…`;
     const res = await fetch("/api/gadgets/light", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -965,7 +965,7 @@ if (gadgetStatusBtn) {
       gadgetLightView.textContent = `Gadget light rejected: ${body.detail || res.status}`;
       return;
     }
-    gadgetLightView.textContent = `Gadget command (simulated): string lights ${body.state} via ${body.service}. Watch the Devices panel — HA state, via WebSocket, reflects it.`;
+    gadgetLightView.textContent = `Gadget command (conceptual PoC, simulated): string lights ${body.state} via ${body.service}. Watch the Devices panel — HA state, via WebSocket, reflects it.`;
     await refreshGraph();
   };
   document.getElementById("gadget-light-on").addEventListener("click", gadgetLight(true));

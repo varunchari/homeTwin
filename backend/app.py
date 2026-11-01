@@ -1162,7 +1162,7 @@ async def gadgets_status() -> dict:
     lights.sort(key=lambda x: x["entity_id"])
     return {"simulated": True, "command": "hometwin.status",
             "lights": lights, "patio_door": door, "sun": sun,
-            "note": "Simulated gadget invocation — a paired Muse call has not been verified."}
+            "note": "Conceptual proof of concept, simulated gadget invocation — no paired Muse app ask is supported here."}
 
 
 class GadgetLightRequest(BaseModel):
