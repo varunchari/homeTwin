@@ -839,6 +839,12 @@ document.getElementById("reset-btn").addEventListener("click", async () => {
   if (moveText) moveText.value = "";
   const sceneName = document.getElementById("scene-name");
   if (sceneName) sceneName.value = "";
+  const advisorText = document.getElementById("advisor-text");
+  if (advisorText) advisorText.value = "cozy evening";
+  const todVariant = document.getElementById("tod-variant");
+  if (todVariant) todVariant.value = "morning";
+  const tmWhen = document.getElementById("tm-when");
+  if (tmWhen) tmWhen.value = "";
   tapped = false;
   whatifDone = false;
   updateSteps();
