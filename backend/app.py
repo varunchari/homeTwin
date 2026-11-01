@@ -703,6 +703,39 @@ def _banned_intent(text: str) -> str | None:
     return m.group(1).lower() if m else None
 
 
+def _ir_qualifier(ir: dict) -> str:
+    """Plain-language tail for an IR: condition and delay, if any."""
+    bits = []
+    if (ir.get("condition") or {}).get("sun") == "after_sunset":
+        bits.append("only after sunset")
+    if ir.get("delay_s"):
+        bits.append(f"off after {ir['delay_s']}s")
+    return (" (" + ", ".join(bits) + ")") if bits else ""
+
+
+def _deployed_conflict_warning(deployed: list[dict], ir: dict) -> str | None:
+    """Warn when a deployed rule already covers this trigger + target.
+
+    Same trigger and target but a different condition or delay means both
+    rules will fire — usually a surprise, never a block. Identical twins
+    and unrelated rules stay silent.
+    """
+    trig = (ir.get("trigger") or {}).get("entity_id")
+    act = (ir.get("action") or {}).get("entity_id")
+    for p in deployed:
+        old = p.get("ir") or {}
+        if ((old.get("trigger") or {}).get("entity_id") != trig
+                or (old.get("action") or {}).get("entity_id") != act):
+            continue
+        if ((old.get("condition") or None) == (ir.get("condition") or None)
+                and (old.get("delay_s") or 0) == (ir.get("delay_s") or 0)):
+            continue
+        return (f"Rule #{p['id']} already turns {act} on when {trig} opens"
+                f"{_ir_qualifier(old)} — approving adds a second rule and "
+                "both will fire.")
+    return None
+
+
 class ProposeRequest(BaseModel):
     photo_id: int
     source_object_id: str
@@ -789,6 +822,8 @@ async def propose_automation(request: Request, req: ProposeRequest) -> dict:
     reasons = validate_ir(ir, registry)
     if reasons:
         raise HTTPException(status_code=422, detail="; ".join(reasons))
+    conflict_warning = _deployed_conflict_warning(
+        store_module.deployed_ir_summaries(req.photo_id), ir)
     proposal_id = store_module.save_proposal(
         req.photo_id, req.source_object_id, req.target_object_id, req.text, ir,
         compile_ir(ir, alias=f"HomeTwin {req.source_object_id} to {req.target_object_id}"))
@@ -796,7 +831,7 @@ async def propose_automation(request: Request, req: ProposeRequest) -> dict:
     return {"proposal_id": proposal_id, "ir": ir,
             "compiled": proposal["compiled"], "latency_ms": latency_ms,
             "approval_required": True, "provider": req.provider,
-            "model": model_name}
+            "model": model_name, "conflict_warning": conflict_warning}
 
 
 @app.post("/api/automations/{proposal_id}/approve")
