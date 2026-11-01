@@ -68,6 +68,13 @@ CREATE TABLE IF NOT EXISTS proposals (
   status TEXT NOT NULL DEFAULT 'pending',
   created REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS snapshots (
+  ts REAL NOT NULL,
+  entity_id TEXT NOT NULL,
+  state TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_snapshots_ts ON snapshots(ts);
+CREATE INDEX IF NOT EXISTS idx_snapshots_entity_ts ON snapshots(entity_id, ts);
 """
 
 
@@ -375,6 +382,54 @@ def list_proposals(photo_id: int | None = None) -> list[dict]:
                             f"{ir['action']['entity_id']}")
             out.append(d)
         return out
+    finally:
+        conn.close()
+
+
+def record_snapshot(rows: list[tuple[float, str, str]]) -> int:
+    """Store one poll of device states. Returns rows written."""
+    if not rows:
+        return 0
+    conn = connect()
+    try:
+        conn.executemany("INSERT INTO snapshots (ts, entity_id, state) VALUES (?, ?, ?)",
+                         rows)
+        conn.commit()
+        return len(rows)
+    finally:
+        conn.close()
+
+
+def snapshot_history(entity_id: str | None = None, since_ts: float | None = None,
+                     limit: int = 1000) -> list[dict]:
+    """Read snapshots back, oldest first. Bounded: the time machine reads
+    windows, never the whole table."""
+    conn = connect()
+    try:
+        q = "SELECT ts, entity_id, state FROM snapshots"
+        clauses, args = [], []
+        if entity_id is not None:
+            clauses.append("entity_id=?")
+            args.append(entity_id)
+        if since_ts is not None:
+            clauses.append("ts>=?")
+            args.append(since_ts)
+        if clauses:
+            q += " WHERE " + " AND ".join(clauses)
+        q += " ORDER BY ts ASC LIMIT ?"
+        args.append(max(1, min(limit, 5000)))
+        return [dict(r) for r in conn.execute(q, args).fetchall()]
+    finally:
+        conn.close()
+
+
+def prune_snapshots(before_ts: float) -> int:
+    """Delete snapshots older than a cutoff. Returns rows removed."""
+    conn = connect()
+    try:
+        cur = conn.execute("DELETE FROM snapshots WHERE ts<?", (before_ts,))
+        conn.commit()
+        return cur.rowcount
     finally:
         conn.close()
 

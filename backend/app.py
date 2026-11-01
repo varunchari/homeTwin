@@ -192,11 +192,82 @@ async def _ensure_listener() -> None:
         _ha_task = asyncio.create_task(_ha_listener())
 
 
+# --- State memory: periodic device snapshots (time-machine foundation) ---
+# Read-only against HA: one GET per interval, no writes, no models. Powers a
+# future "room as it was" view (device states overlaid on the frozen photo —
+# never a relit photo, which no image model can reproduce faithfully).
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+MEMORY_INTERVAL_S = max(5, _env_int("MEMORY_INTERVAL_S", 60))
+MEMORY_RETENTION_DAYS = max(1, _env_int("MEMORY_RETENTION_DAYS", 7))
+_memory_task: asyncio.Task | None = None
+
+
+def _memorable(entity_id: str) -> bool:
+    """Entities worth remembering: demo lights, door, screens, sun."""
+    return (entity_id.startswith("light.")
+            or entity_id == "binary_sensor.patio_door"
+            or entity_id in BINDABLE_INPUTS
+            or entity_id == "sun.sun")
+
+
+async def _record_snapshot_once() -> int:
+    """One poll: store memorable states, prune past retention. Testable."""
+    import time
+    import store as store_module
+
+    now = time.time()
+    rows = [(now, s.get("entity_id"), str(s.get("state")))
+            for s in await _ha_states()
+            if _memorable(s.get("entity_id", ""))]
+    n = store_module.record_snapshot(rows)
+    store_module.prune_snapshots(now - MEMORY_RETENTION_DAYS * 86400)
+    return n
+
+
+async def _memory_loop() -> None:
+    global _memory_task
+    try:
+        while True:
+            try:
+                await _record_snapshot_once()
+            except Exception:
+                pass  # HA down must never kill the proxy
+            await asyncio.sleep(MEMORY_INTERVAL_S)
+    finally:
+        _memory_task = None
+
+
+async def _ensure_recorder() -> None:
+    global _memory_task
+    if _memory_task is None or _memory_task.done():
+        _memory_task = asyncio.create_task(_memory_loop())
+
+
+@app.get("/api/history")
+async def history(entity_id: str | None = None, minutes: int = 60,
+                  limit: int = 1000) -> dict:
+    """Read snapshots back, oldest first. Windows only, never the table."""
+    import time
+    import store as store_module
+
+    minutes = max(1, min(minutes, MEMORY_RETENTION_DAYS * 24 * 60))
+    since = time.time() - minutes * 60
+    return {"snapshots": store_module.snapshot_history(entity_id, since, limit)}
+
+
 @app.websocket("/ws")
 async def ws_feed(ws: WebSocket) -> None:
     await ws.accept()
     _clients.add(ws)
     await _ensure_listener()
+    await _ensure_recorder()
     try:
         while True:
             await ws.receive_text()  # keepalive; client messages ignored Day 1

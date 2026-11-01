@@ -81,6 +81,10 @@ Live Baseten beats, both observed: proposal #30 (3,474 ms) and an independent re
 - Reset works from a fresh session: it turns everything off, deletes deployed `hometwin_*` rules, and clears bindings and history, leaving the demo usable again immediately.
 - Advisor and time-of-day live round trips (suggest → preview → apply, all three presets) are still to be verified live after a rebuild; they are described above as shipped code, not claimed as live-verified beats.
 
+## State memory (time-machine foundation, no UI yet)
+
+The backend snapshots demo device states (lights, patio door, TV/display switches, sun) every 60 seconds into SQLite, retained 7 days, readable via `GET /api/history`. Read-only against HA: no writes, no models. This is the foundation for a future "room as it was" view — device states overlaid on the frozen photo, never a relit photo. The picker UI is not built yet (see Roadmap).
+
 ## Roadmap (future only — not shipped)
 
 The following are planned, in future tense, and are not present-tense claims about this demo:
