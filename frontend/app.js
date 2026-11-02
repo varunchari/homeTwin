@@ -197,13 +197,25 @@ function say(msg) { photoMsg.textContent = msg; }
 // without this, every overlay drifts into the black bars. Inset #regions to
 // the image's rendered box on load, resize, and every regions render.
 function fitRegions() {
+  // The img ELEMENT stays full container width (width:100%) while
+  // object-fit:contain letterboxes the PICTURE inside it — so the element
+  // box lies. Recompute the displayed picture rect from the natural aspect.
   if (!photoEl || photoEl.hidden || !photoEl.naturalWidth) return;
   const wrap = photoEl.parentElement.getBoundingClientRect();
   const img = photoEl.getBoundingClientRect();
-  regionsEl.style.left = `${img.left - wrap.left}px`;
-  regionsEl.style.top = `${img.top - wrap.top}px`;
-  regionsEl.style.width = `${img.width}px`;
-  regionsEl.style.height = `${img.height}px`;
+  const aspect = photoEl.naturalWidth / photoEl.naturalHeight;
+  let w = img.width, h = img.width / aspect, x = 0, y = 0;
+  if (h > img.height) {
+    h = img.height;
+    w = h * aspect;
+    x = (img.width - w) / 2;
+  } else {
+    y = (img.height - h) / 2;
+  }
+  regionsEl.style.left = `${img.left - wrap.left + x}px`;
+  regionsEl.style.top = `${img.top - wrap.top + y}px`;
+  regionsEl.style.width = `${w}px`;
+  regionsEl.style.height = `${h}px`;
   regionsEl.style.right = "auto";
   regionsEl.style.bottom = "auto";
 }
