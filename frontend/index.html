@@ -165,7 +165,9 @@
         <p class="muted">The room as it was: pins, Devices, and counts show recorded device states at the chosen time. The photo itself is unchanged — states are memory, pixels are not. Controls lock while viewing the past.</p>
         <div id="tm-row">
           <input id="tm-date" type="date" title="Date to revisit" />
-          <input id="tm-time" type="time" step="60" title="Time to revisit" />
+          <select id="tm-hour" title="Hour to revisit"></select>
+          <span class="tm-colon">:</span>
+          <select id="tm-min" title="Minute to revisit"></select>
           <button id="tm-view-btn" class="btn primary">View past</button>
           <button id="tm-live-btn" class="btn" hidden>Back to live</button>
         </div>

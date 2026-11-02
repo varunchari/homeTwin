@@ -432,8 +432,12 @@ async function refreshProposals() {
     // Name the bound devices, not the region ids: "Patio Door → Reading Light".
     const sEnt = bindings[p.source_id];
     const tEnt = bindings[p.target_id];
+    let suffix = `[${p.status}]`;
+    if (p.status === "deployed") {
+      suffix += p.last_triggered ? `, last fired ${fmtFired(p.last_triggered)}` : ", never fired";
+    }
     opt.textContent = `#${p.id} ${sEnt ? prettyEntity(sEnt) : prettyOid(p.source_id)} → ` +
-      `${tEnt ? prettyEntity(tEnt) : prettyOid(p.target_id)} [${p.status}]`;
+      `${tEnt ? prettyEntity(tEnt) : prettyOid(p.target_id)} ${suffix}`;
     whatifProposal.appendChild(opt);
   }
   if ([...whatifProposal.options].some((o) => o.value === keep)) whatifProposal.value = keep;
@@ -643,18 +647,36 @@ document.getElementById("move-btn").addEventListener("click", async () => {
   prevBtn.className = "btn";
   prevBtn.textContent = "Preview move";
   prevBtn.addEventListener("click", async () => {
+    // Image edits can stall: bound the wait under the backend timeout, say
+    // so on screen, and leave a working retry — never a dead button.
     prevBtn.disabled = true;
-    const r2 = await fetch(`/api/photos/${photoId}/move-preview`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ photo_id: photoId, move_id: body.move_id }),
-    });
+    prevBtn.textContent = "Rendering preview…";
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 100000);
+    let r2;
+    try {
+      r2 = await fetch(`/api/photos/${photoId}/move-preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photo_id: photoId, move_id: body.move_id }),
+        signal: ctl.signal,
+      });
+    } catch (e) {
+      clearTimeout(timer);
+      prevBtn.disabled = false;
+      prevBtn.textContent = "Retry preview";
+      say(`Move preview ${e.name === "AbortError" ? "timed out after 100s — try again" : `failed: ${e.message}`}.`);
+      return;
+    }
+    clearTimeout(timer);
     const b2 = await r2.json();
     if (!r2.ok) {
       prevBtn.disabled = false;
+      prevBtn.textContent = "Retry preview";
       say(`Move preview failed: ${b2.detail || r2.status}`);
       return;
     }
+    prevBtn.textContent = "Preview move";
     const img = document.createElement("img");
     img.src = b2.preview_url;
     img.alt = "Illustrative move preview";
@@ -766,18 +788,38 @@ function lockControls(lock) {
   }
 }
 function resetTmInputs() {
-  // Separate date + time pickers: unlike datetime-local, each popup commits
-  // its selection on click, so no segment-by-segment keyboard entry.
+  // Date popup commits on click; hour/minute are plain selects, which always
+  // commit on click too — no segment-by-segment keyboard entry anywhere.
+  // valueAsDate is deliberately avoided: it stamps the UTC date, which reads
+  // as tomorrow on US evenings. Local components keep local today.
   const date = document.getElementById("tm-date");
-  const time = document.getElementById("tm-time");
-  if (date) date.valueAsDate = new Date();
-  if (time) time.value = "";
+  const hour = document.getElementById("tm-hour");
+  const min = document.getElementById("tm-min");
+  const fill = (sel, n) => {
+    if (!sel || sel.options.length) return;
+    for (let i = 0; i < n; i++) {
+      const o = document.createElement("option");
+      o.value = String(i).padStart(2, "0");
+      o.textContent = o.value;
+      sel.appendChild(o);
+    }
+  };
+  fill(hour, 24);
+  fill(min, 60);
+  const now = new Date();
+  if (date) {
+    date.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-` +
+      String(now.getDate()).padStart(2, "0");
+  }
+  if (hour) hour.value = String(now.getHours()).padStart(2, "0");
+  if (min) min.value = String(now.getMinutes()).padStart(2, "0");
 }
 document.getElementById("tm-view-btn").addEventListener("click", async () => {
   const date = document.getElementById("tm-date").value;
-  const time = document.getElementById("tm-time").value || "00:00";
+  const hh = document.getElementById("tm-hour").value;
+  const mm = document.getElementById("tm-min").value;
   if (!date) { say("Pick a date first."); return; }
-  const ts = Math.floor(new Date(`${date}T${time}`).getTime() / 1000);
+  const ts = Math.floor(new Date(`${date}T${hh}:${mm}`).getTime() / 1000);
   if (Number.isNaN(ts)) { say("That date did not parse."); return; }
   const res = await fetch(`/api/state-at?ts=${ts}`);
   const body = await res.json();

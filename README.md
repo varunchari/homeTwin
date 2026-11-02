@@ -83,7 +83,7 @@ Live Baseten beats, both observed: proposal #30 (3,474 ms) and an independent re
 
 ## State memory (time-machine foundation, no UI yet)
 
-The backend snapshots demo device states (lights, patio door, TV/display switches, sun) every 60 seconds into SQLite, retained 7 days, readable via `GET /api/history`. Read-only against HA: no writes, no models. This is the foundation for a future "room as it was" view — device states overlaid on the frozen photo, never a relit photo. The picker UI is not built yet (see Roadmap).
+The backend snapshots demo device states (lights, patio door, TV/display switches, sun) every 60 seconds into SQLite, retained 7 days, readable via `GET /api/history`. Recording starts with the first browser connection after a deploy — earlier times honestly report "no snapshots yet." Read-only against HA: no writes, no models. This is the foundation for a future "room as it was" view — device states overlaid on the frozen photo, never a relit photo. The picker UI is not built yet (see Roadmap).
 
 ## Roadmap (future only — not shipped)
 

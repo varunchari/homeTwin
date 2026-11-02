@@ -1003,7 +1003,24 @@ async def proposals_list(photo_id: int | None = None) -> dict:
     """Proposals for one photo only. Unfiltered listing would leak another
     photo's history into a fresh session, which looks prepopulated."""
     import store as store_module
-    return {"proposals": store_module.list_proposals(photo_id=photo_id)}
+
+    proposals = store_module.list_proposals(photo_id=photo_id)
+    if any(p.get("status") == "deployed" for p in proposals):
+        # Last-fired proof where judges actually look: the What-If selector.
+        # Match by rule id attribute (several rules can share one alias slug).
+        try:
+            states = await _ha_states()
+        except HTTPException:
+            states = []
+        fired = {}
+        for s in states:
+            attrs = s.get("attributes") or {}
+            if isinstance(attrs.get("id"), str):
+                fired[attrs["id"]] = attrs.get("last_triggered")
+        for p in proposals:
+            if p.get("status") == "deployed":
+                p["last_triggered"] = fired.get(f"hometwin_{p['id']}")
+    return {"proposals": proposals}
 
 
 @app.post("/api/whatif")
