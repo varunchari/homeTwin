@@ -88,6 +88,10 @@ class UIPolishTest(unittest.TestCase):
     def test_no_internal_photo_ids_in_status(self):
         self.assertNotIn("already known", self.js)
 
+    def test_automate_folded_and_rows_equal(self):
+        self.assertIn('<details class="fold guest-hide" id="automate-fold">', self.html)
+        self.assertIn("gap: 1.25rem; align-items: stretch;", self.css)
+
 
 if __name__ == "__main__":
     unittest.main()
@@ -136,8 +140,8 @@ class UIFixesTest(unittest.TestCase):
 
     def test_dock_and_board_collapsible_with_capped_heights(self):
         self.assertIn('<details id="preview-dock"', self.html)
-        # Board stays hidden until a photo exists (no prepopulated feel).
-        self.assertIn('<details id="live-board" open hidden>', self.html)
+        # Board stays hidden and folded until a photo exists.
+        self.assertIn('<details id="live-board" hidden>', self.html)
         self.assertIn('document.getElementById("live-board").hidden = false;', self.js)
         self.assertIn("#preview-dock img { max-height: 40vh;", self.css)
         self.assertIn("#live-devices, #live-automations { max-height: 35vh;", self.css)

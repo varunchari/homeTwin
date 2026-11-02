@@ -91,12 +91,15 @@ class GuestGuardTest(unittest.TestCase):
         self.assertIn("Guest view", html)
         for section in ("2 · Bind", "4 · Automate", "Voice", "5 · What-If",
                         "6 · Design Advisor", "7 · Rearrange", "8 · Scenes"):
-            # Each authoring section must carry the guest-hide class. Match
-            # the <h2>, not bare text: the step rail repeats these labels.
+            # Each authoring block must carry the guest-hide class. Match
+            # the heading (<h2> or folded <summary>), not bare text: the
+            # step rail repeats these labels.
             h2 = html.find("<h2>" + section)
+            if h2 == -1:
+                h2 = html.find(">" + section + "</summary>")
             self.assertNotEqual(h2, -1, section)
-            start = html.rfind("<section", 0, h2)
-            self.assertIn("guest-hide", html[start:h2 + 20], section)
+            opened = max(html.rfind("<section", 0, h2), html.rfind("<details", 0, h2))
+            self.assertIn("guest-hide", html[opened:h2 + 20], section)
 
 
 if __name__ == "__main__":
