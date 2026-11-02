@@ -61,6 +61,34 @@ class UILayoutTest(unittest.TestCase):
         self.assertGreaterEqual(self.js.count("hidePreview();"), 2)
 
 
+class UIPolishTest(unittest.TestCase):
+    """Empty state, board gating, toolbar stand-down, pill rows."""
+
+    def setUp(self):
+        self.html = (ROOT / "frontend" / "index.html").read_text()
+        self.css = (ROOT / "frontend" / "app.css").read_text()
+        self.js = (ROOT / "frontend" / "app.js").read_text()
+
+    def test_empty_state_has_ctas(self):
+        self.assertIn('id="empty-demo-btn"', self.html)
+        self.assertIn('id="empty-upload-btn"', self.html)
+        self.assertIn('document.getElementById("demo-btn").click();', self.js)
+        self.assertIn('document.getElementById("photo-input").click();', self.js)
+
+    def test_rail_and_board_gated_until_photo(self):
+        self.assertIn('id="steps-nav" hidden', self.html)
+        self.assertIn('document.getElementById("steps-nav").hidden = false;', self.js)
+        self.assertIn('document.getElementById("photo-tools").open = false;', self.js)
+
+    def test_board_rows_use_pills(self):
+        self.assertIn('className = "board-name";', self.js)
+        self.assertIn('pill.textContent = st === "on" ? "ON" : "OFF";', self.js)
+        self.assertIn(".pill.on", self.css)
+
+    def test_no_internal_photo_ids_in_status(self):
+        self.assertNotIn("already known", self.js)
+
+
 if __name__ == "__main__":
     unittest.main()
 
@@ -108,7 +136,9 @@ class UIFixesTest(unittest.TestCase):
 
     def test_dock_and_board_collapsible_with_capped_heights(self):
         self.assertIn('<details id="preview-dock"', self.html)
-        self.assertIn('<details id="live-board" open>', self.html)
+        # Board stays hidden until a photo exists (no prepopulated feel).
+        self.assertIn('<details id="live-board" open hidden>', self.html)
+        self.assertIn('document.getElementById("live-board").hidden = false;', self.js)
         self.assertIn("#preview-dock img { max-height: 40vh;", self.css)
         self.assertIn("#live-devices, #live-automations { max-height: 35vh;", self.css)
 

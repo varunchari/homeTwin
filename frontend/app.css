@@ -95,7 +95,13 @@ body {
   border: 1px solid #3a4653; background: #0d1114; color: var(--text);
 }
 #photo-wrap { position: relative; margin-top: 0.9rem; border-radius: 8px; overflow: hidden; background: #0d1114; }
-#photo { display: block; width: 100%; }
+#photo { display: block; width: 100%; max-height: 65vh; object-fit: contain; background: #000; }
+#photo-empty { text-align: center; padding: 3.5rem 1.5rem; }
+.empty-title { font-size: 1.4rem; font-weight: 700; margin: 0 0 0.5rem; }
+#photo-empty .btn { margin: 0.75rem 0.25rem 0; }
+#photo-tools { margin-bottom: 0.25rem; }
+#photo-tools > summary { cursor: pointer; color: var(--muted); font-size: 0.8rem; }
+.canvas-card.has-photo #photo-tools { margin-bottom: 0; }
 #photo[hidden] { display: none; }
 #regions { position: absolute; inset: 0; }
 /* Selection boxes appear only in bind/edit mode; pins are the everyday face. */
@@ -115,8 +121,10 @@ body {
   transform: translate(-50%, -50%);
   display: flex; align-items: center; justify-content: center;
   font-size: 0.75rem; font-weight: 700; white-space: nowrap;
-  color: var(--text); background: rgba(13, 17, 20, 0.9);
-  border: 2px solid var(--muted);
+  color: #fff; background: rgba(13, 17, 20, 0.9);
+  border: 2px solid #cfd8e3;
+  text-shadow: 0 1px 3px #000, 0 0 6px #000;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
   padding: 0 0.6rem;
 }
 .pin.manual { border-style: dashed; }
@@ -301,6 +309,10 @@ body.guest .guest-hide { display: none !important; }
 #preview-dock summary, #live-board summary { cursor: pointer; font-weight: 600; font-size: 0.95rem; }
 #preview-dock img { max-height: 40vh; object-fit: cover; }
 #live-devices, #live-automations { max-height: 35vh; overflow-y: auto; }
+#live-devices li, #live-automations li { justify-content: flex-start; }
+#live-devices .board-name { flex: 1; }
+.pill { font-size: 0.7rem; font-weight: 700; padding: 0.1rem 0.5rem; border-radius: 999px; background: #2a343e; color: var(--muted); }
+.pill.on { background: #1d3a24; color: var(--accent); }
 @media (max-width: 60rem) {
   .canvas-card { position: static; max-height: none; overflow: visible; }
   /* Narrow: the panel is a bottom sheet, not a column below the photo.

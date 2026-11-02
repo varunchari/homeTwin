@@ -73,8 +73,12 @@ function renderLiveBoard() {
     const dot = document.createElement("span");
     dot.className = "dot" + (st === "on" ? " on" : "");
     const name = document.createElement("span");
-    name.textContent = `${prettyEntity(id)} — ${st}`;
-    li.appendChild(dot); li.appendChild(name); devEl.appendChild(li);
+    name.className = "board-name";
+    name.textContent = prettyEntity(id);
+    const pill = document.createElement("span");
+    pill.className = "pill" + (st === "on" ? " on" : "");
+    pill.textContent = st === "on" ? "ON" : "OFF";
+    li.appendChild(dot); li.appendChild(name); li.appendChild(pill); devEl.appendChild(li);
   }
 }
 
@@ -1072,6 +1076,12 @@ document.getElementById("reset-btn").addEventListener("click", async () => {
   document.getElementById("reset-btn").disabled = false;
 });
 
+document.getElementById("empty-demo-btn").addEventListener("click", () => {
+  document.getElementById("demo-btn").click();
+});
+document.getElementById("empty-upload-btn").addEventListener("click", () => {
+  document.getElementById("photo-input").click();
+});
 document.getElementById("demo-btn").addEventListener("click", async () => {
   say("Loading the demo room photo…");
   const res = await fetch("/api/photos/demo", { method: "POST" });
@@ -1096,11 +1106,17 @@ async function usePhoto(body) {
   tapped = false;
   whatifDone = false;
   document.getElementById("suggest-btn").disabled = false;
+  // The room is here now: reveal the rail and board, stand the toolbar down.
+  document.getElementById("steps-nav").hidden = false;
+  document.getElementById("live-board").hidden = false;
+  document.getElementById("photo-tools").open = false;
+  document.querySelector(".canvas-card").classList.add("has-photo");
+  updateSteps();
   photoEl.src = `/api/photos/${photoId}/image`;
   photoEl.hidden = false;
   document.getElementById("photo-empty").classList.add("gone");
   if (body.reused) {
-    say(`Photo ${photoId} already known — loaded its regions directly.`);
+    say(`Known photo — loaded its ${body.regions.length} regions directly, no re-segmenting.`);
   } else {
     const hits = (body.auto_segment || []).filter((a) => a.regions.length > 0);
     const missed = (body.auto_segment || []).filter((a) => a.regions.length === 0);

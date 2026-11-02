@@ -26,7 +26,7 @@
     </div>
   </header>
 
-  <nav aria-label="Demo steps"><ol id="steps">
+  <nav aria-label="Demo steps" id="steps-nav" hidden><ol id="steps">
     <li data-step="1">1 · Photo</li>
     <li data-step="2">2 · Bind</li>
     <li data-step="3">3 · Tap</li>
@@ -38,20 +38,28 @@
   <div id="tm-banner" class="tm-banner" hidden></div>
   <main class="layout">
     <section class="canvas-card">
-      <div class="canvas-toolbar">
-        <label class="file-btn guest-hide">Upload photo
-          <input type="file" id="photo-input" accept="image/jpeg,image/png" hidden />
-        </label>
-        <button id="demo-btn" class="btn">Use demo room</button>
-        <input id="phrase-input" class="guest-hide" placeholder="Concept phrase — e.g. lamp" />
-        <button id="segment-btn" class="btn primary guest-hide">Segment</button>
-        <button id="draw-btn" class="btn guest-hide">Draw region</button>
-      </div>
+      <details id="photo-tools" open>
+        <summary>Photo tools</summary>
+        <div class="canvas-toolbar">
+          <label class="file-btn guest-hide">Upload photo
+            <input type="file" id="photo-input" accept="image/jpeg,image/png" hidden />
+          </label>
+          <button id="demo-btn" class="btn primary">Use demo room</button>
+          <input id="phrase-input" class="guest-hide" placeholder="Concept phrase — e.g. lamp" />
+          <button id="segment-btn" class="btn guest-hide">Segment</button>
+          <button id="draw-btn" class="btn guest-hide">Draw region</button>
+        </div>
+      </details>
       <div id="phrase-chips" class="chips guest-hide"></div>
       <div id="photo-wrap">
         <img id="photo" alt="Room photo" hidden />
         <div id="regions"></div>
-        <div id="photo-empty">1 · Upload a photo — or use the demo room — to begin.<br />Then 2 · bind, and 3 · tap a device pin to control it.</div>
+        <div id="photo-empty">
+          <p class="empty-title">Your room becomes the remote.</p>
+          <p class="muted">Load the demo room to get 6 devices — lamps, TV, patio door — as tappable pins, then bind, tap, and automate.</p>
+          <button id="empty-demo-btn" class="btn primary">Use demo room</button>
+          <button id="empty-upload-btn" class="btn guest-hide">Upload my photo</button>
+        </div>
       </div>
       <p id="photo-msg"></p>
       <section id="sheet" class="sheet" hidden>
@@ -70,9 +78,9 @@
         <p class="muted">Illustrative preview — not a calibrated simulation, not photometrically accurate. Approving a setting applies only supported light on/off actions in Home Assistant. The controls that apply it stay in the right panel; this dock only mirrors the image next to the live room so it can be compared with it.</p>
         <button id="preview-dock-hide" class="btn">Hide preview</button>
       </details>
-      <details id="live-board" open>
+      <details id="live-board" open hidden>
         <summary id="live-board-title">Live in this room</summary>
-        <p class="muted">Mirrors Devices and automations, next to the photo, so a change is visible without scrolling to the bottom of the panel.</p>
+        <p class="muted">Devices and automations, next to the photo.</p>
         <ul id="live-devices" class="devices"></ul>
         <ul id="live-automations" class="proposals"></ul>
       </details>
@@ -109,19 +117,22 @@
       </section>
       <section class="guest-hide">
         <h2>Voice</h2>
-        <p class="muted">Push-to-talk only. The transcript is always shown below, and voice is never the only path — the typed Automate box above still works. No spoken replies: transcription is speech-to-text only. Audio is sent once for transcription and is not stored.</p>
+        <p class="muted">Push-to-talk: hold, speak, release. Transcript always shown; typing still works.</p>
         <button id="voice-btn" class="btn primary">Hold to talk</button>
         <div id="voice-transcript" class="plan" hidden></div>
         <div id="voice-action"></div>
-        <p class="muted">Supported utterances only — anything else gets "not supported yet" and is never executed:
-          "Turn the reading light on" ·
+        <details class="fold-sub">
+          <summary class="muted">Supported phrases</summary>
+          <p class="muted">"Turn the reading light on" ·
           "When the door opens, turn the reading light on" ·
           "When the door opens after sunset, turn the string lights on" ·
-          "When the door opens, turn the reading light on, off after a minute"</p>
+          "When the door opens, turn the reading light on, off after a minute" ·
+          Anything else gets "not supported yet" and is never executed. Audio is sent once and not stored.</p>
+        </details>
       </section>
       <section class="guest-hide">
         <h2>5 · What-If <span class="sim-tag">simulated</span></h2>
-        <p class="muted">Simulate one rule at a time, from its own card: pick the door and sun below, then Run What-If on that card.</p>
+        <p class="muted">One rule at a time, from its own card.</p>
         <div id="whatif-row">
           <select id="whatif-door" title="Simulated door event">
             <option value="on">door opens</option>
@@ -156,7 +167,7 @@
       </section>
       <section class="guest-hide">
         <h2>7 · Rearrange</h2>
-        <p class="muted">A proposed rearrangement, not an actuation: the pin moves, the light stays put, tap keeps working. Decline changes nothing.</p>
+        <p class="muted">Proposed, not actuated: the pin moves, the light stays put.</p>
         <div id="move-row">
           <select id="move-object" title="Lamp to move"></select>
           <input id="move-text" placeholder="Move where — e.g. closer to the sofa" />
@@ -168,13 +179,13 @@
         <h2>8 · Scenes</h2>
         <div id="scene-row">
           <input id="scene-name" placeholder="Scene name — e.g. movie night" maxlength="40" />
-          <button id="scene-save-btn" class="btn">Save current lights</button>
+          <button id="scene-save-btn" class="btn primary">Save current lights</button>
         </div>
         <ul id="scene-list" class="proposals"></ul>
       </section>
       <section class="guest-hide">
         <h2>9 · Time machine</h2>
-        <p class="muted">The room as it was: drag the timeline through recorded history, then View past. Pins, Devices, and counts show recorded device states at the chosen time. The photo itself is unchanged — states are memory, pixels are not. Controls lock while viewing the past. Play steps through recorded moments one snapshot at a time.</p>
+        <p class="muted">Drag the timeline, then View past. Pins and Devices show recorded states — the photo itself is unchanged. Controls lock.</p>
         <div id="tm-row">
           <input id="tm-range" type="range" min="0" max="0" value="0" step="1" title="Drag through recorded history" />
           <span id="tm-label">Loading timeline…</span>
