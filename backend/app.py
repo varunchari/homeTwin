@@ -1456,13 +1456,14 @@ async def advisor_suggest(request: Request, req: AdvisorSuggestRequest) -> dict:
 
 @app.post("/api/advisor/preview")
 async def advisor_preview(request: Request, req: AdvisorPreviewRequest) -> dict:
-    """Illustrative Muse Image preview for one chosen setting. No HA write."""
+    """Illustrative Muse Image edit of the room photo for one chosen
+    setting. Text-only generation could never resemble the room, so the
+    photo is always the edit source. No HA write."""
     import time
     from advisor import advisor_preview_prompt, validate_settings
-    from image_client import IMAGE_MODEL, ImageError, generate_image
+    from image_client import IMAGE_MODEL, ImageError, edit_image
 
-    if not get_photo(req.photo_id):
-        raise HTTPException(status_code=404, detail="unknown photo")
+    _photo, raw = _photo_bytes(req.photo_id)
     registry = {s.get("entity_id") for s in await _ha_states()}
     setting = req.setting.model_dump()
     reasons = validate_settings([setting], registry)
@@ -1471,7 +1472,7 @@ async def advisor_preview(request: Request, req: AdvisorPreviewRequest) -> dict:
     _limit_model(request)
     t0 = time.monotonic()
     try:
-        image_bytes = await generate_image(advisor_preview_prompt(setting))
+        image_bytes = await edit_image(raw, advisor_preview_prompt(setting))
     except ImageError as e:
         raise HTTPException(status_code=502, detail=str(e))
     latency_ms = int((time.monotonic() - t0) * 1000)

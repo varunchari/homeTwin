@@ -28,6 +28,19 @@ def setting(name, actions):
             "actions": [{"entity_id": e, "service": s} for e, s in actions]}
 
 
+class PreviewPromptTest(unittest.TestCase):
+    def test_prompt_pins_room_and_lighting_delta(self):
+        from advisor import advisor_preview_prompt
+
+        p = advisor_preview_prompt(setting(
+            "Cozy", [("light.reading_light", "light.turn_on"),
+                     ("light.floor_lamp", "light.turn_off")]))
+        self.assertIn("Edit this exact room photo", p)
+        self.assertIn("Cozy", p)
+        self.assertIn("reading light", p)
+        self.assertIn("floor lamp", p)
+
+
 class ValidateTest(unittest.TestCase):
     def test_two_valid_settings_pass(self):
         settings = [
@@ -203,6 +216,26 @@ class AdvisorEndpointTest(unittest.TestCase):
         image_client.edit_image = self._saved_edit
         proxy._ha_service = self._saved_service
 
+    def test_preview_edits_room_photo_never_generates(self):
+        async def exploding_generate(prompt):
+            raise AssertionError("advisor preview must edit the photo, not generate")
+
+        image_client.generate_image = exploding_generate
+        try:
+            pid = make_photo(self.client)
+            body = self.client.post("/api/advisor/suggest",
+                                    json={"photo_id": pid,
+                                          "request_text": "cozy evening"}).json()
+            preview = self.client.post("/api/advisor/preview",
+                                       json={"photo_id": pid,
+                                             "setting": body["settings"][0],
+                                             "request_text": "cozy evening"}).json()
+            self.assertTrue(preview["preview_url"].startswith("/api/advisor/previews/"))
+            img = self.client.get(preview["preview_url"])
+            self.assertEqual(img.content, b"\x89PNGfake-variant")
+        finally:
+            image_client.generate_image = fake_generate
+
     def test_suggest_preview_apply_and_decline_shape(self):
         pid = make_photo(self.client)
         body = self.client.post("/api/advisor/suggest",
@@ -218,7 +251,7 @@ class AdvisorEndpointTest(unittest.TestCase):
         self.assertTrue(preview["preview_url"].startswith("/api/advisor/previews/"))
         img = self.client.get(preview["preview_url"])
         self.assertEqual(img.status_code, 200)
-        self.assertEqual(img.content, b"\x89PNGfake-preview")
+        self.assertEqual(img.content, b"\x89PNGfake-variant")
         applied = self.client.post("/api/advisor/apply",
                                    json={"setting": body["settings"][0]}).json()
         self.assertTrue(applied["ok"])
