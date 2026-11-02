@@ -108,3 +108,33 @@ class UIFixesTest(unittest.TestCase):
         self.assertIn('<details id="live-board" open>', self.html)
         self.assertIn("#preview-dock img { max-height: 40vh;", self.css)
         self.assertIn("#live-devices, #live-automations { max-height: 35vh;", self.css)
+
+
+class UITestPassFixesTest(unittest.TestCase):
+    """Fixes for the Nov 2 live test pass: stale last-fired, Rearrange
+    decline dock, Reset residuals, and the Minute 00 picker."""
+
+    def setUp(self):
+        self.js = (ROOT / "frontend" / "app.js").read_text()
+        self.py = (ROOT / "backend" / "app.py").read_text()
+
+    def test_rearrange_decline_closes_dock(self):
+        decline = self.js[self.js.find('textContent = "Decline";'):]
+        self.assertIn("hidePreview();", decline[:500])
+
+    def test_reset_restores_model_delay_and_tm_error(self):
+        reset = self.js[self.js.find('getElementById("reset-btn").addEventListener'):]
+        self.assertIn('auto-provider', reset)
+        self.assertIn('value = "hosted"', reset)
+        self.assertIn('auto-delay', reset)
+        self.assertIn('tm-view', reset)
+        self.assertIn('innerHTML = "";', reset)
+
+    def test_tm_minute_falls_back_to_index(self):
+        tm = self.js[self.js.find("function resetTmInputs"):]
+        self.assertIn("min.selectedIndex = now.getMinutes();", tm)
+
+    def test_stale_last_triggered_suppressed(self):
+        self.assertIn("def _stale_last_triggered", self.py)
+        self.assertIn("_stale_last_triggered(p.get(\"created\"), stamp)", self.py)
+        self.assertIn("_stale_last_triggered(created_by_id[cfg_id]", self.py)

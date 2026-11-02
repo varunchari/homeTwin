@@ -95,6 +95,29 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+def _stale_last_triggered(created, iso) -> bool:
+    """True only if an HA last_triggered stamp predates the rule itself.
+
+    HA automation entity_ids are derived from the alias, not the rule id,
+    so after a Reset a brand-new rule reuses an old entity_id and HA
+    restores the old rule's last_triggered. On Nov 2 the fresh rules
+    #47/#48 both showed the Nov 1 evening fire (11/1 8:46 PM) before
+    they had ever fired. A stamp at or before the proposal was created
+    cannot be a fire of this rule, so callers suppress it to 'never
+    fired'. Unparseable stamps are left alone, not guessed about.
+    """
+    if not iso or created is None:
+        return False
+    try:
+        from datetime import datetime, timezone
+        dt = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.timestamp() <= float(created)
+    except (ValueError, TypeError):
+        return False
+
+
 @app.get("/api/entities")
 async def entities() -> list[dict]:
     """Query current HA states (Day 1 exit: returns all entities)."""
@@ -103,14 +126,24 @@ async def entities() -> list[dict]:
     if resp.status_code != 200:
         raise HTTPException(status_code=502, detail=f"HA query failed: {resp.status_code}")
     states = resp.json()
-    return [
-        {
-            "entity_id": s.get("entity_id"),
-            "state": s.get("state"),
-            "attributes": s.get("attributes", {}),
-        }
-        for s in states
-    ]
+    # Suppress restored stamps on reused automation entity_ids (see
+    # _stale_last_triggered): the board and Devices list read from here.
+    try:
+        import store as store_module
+        created_by_id = {f"hometwin_{p['id']}": p.get("created")
+                         for p in store_module.list_proposals()}
+    except Exception:
+        created_by_id = {}
+    out = []
+    for s in states:
+        attrs = dict(s.get("attributes", {}) or {})
+        cfg_id = attrs.get("id")
+        if (s.get("entity_id", "").startswith("automation.") and cfg_id in created_by_id
+                and _stale_last_triggered(created_by_id[cfg_id], attrs.get("last_triggered"))):
+            attrs["last_triggered"] = None
+        out.append({"entity_id": s.get("entity_id"), "state": s.get("state"),
+                    "attributes": attrs})
+    return out
 
 
 class ToggleRequest(BaseModel):
@@ -1019,7 +1052,10 @@ async def proposals_list(photo_id: int | None = None) -> dict:
                 fired[attrs["id"]] = attrs.get("last_triggered")
         for p in proposals:
             if p.get("status") == "deployed":
-                p["last_triggered"] = fired.get(f"hometwin_{p['id']}")
+                stamp = fired.get(f"hometwin_{p['id']}")
+                # Restored stamp on a reused entity_id, not a fire of
+                # this rule (see _stale_last_triggered): report none.
+                p["last_triggered"] = None if _stale_last_triggered(p.get("created"), stamp) else stamp
     return {"proposals": proposals}
 
 

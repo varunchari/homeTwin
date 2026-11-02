@@ -340,6 +340,12 @@ class ProposeApproveTest(unittest.TestCase):
         self.assertIn("both will fire", second["conflict_warning"])
 
     def test_proposals_carry_last_triggered(self):
+        # Stamp must be AFTER the proposal was created, or it is a
+        # restored stamp from a reused entity_id (Nov 2 bug: fresh
+        # rules #47/#48 showed the Nov 1 evening fire).
+        import datetime
+        fresh = (datetime.datetime.now(datetime.timezone.utc)
+                 + datetime.timedelta(hours=1)).isoformat()
         pid = make_bound_photo(self.client, w=519)
         first = self.client.post("/api/automations/propose",
                                  json={"photo_id": pid, "source_object_id": "door",
@@ -348,14 +354,35 @@ class ProposeApproveTest(unittest.TestCase):
         HA_STATES.append({"entity_id": "automation.hometwin_patio_door_to_lamp",
                           "state": "on",
                           "attributes": {"id": f"hometwin_{first['proposal_id']}",
-                                         "last_triggered": "2026-11-02T04:15:00+00:00"}})
+                                         "last_triggered": fresh}})
         try:
             listed = self.client.get("/api/automations/proposals",
                                      params={"photo_id": pid}).json()["proposals"]
         finally:
             HA_STATES.pop()
         mine = next(p for p in listed if p["id"] == first["proposal_id"])
-        self.assertEqual(mine["last_triggered"], "2026-11-02T04:15:00+00:00")
+        self.assertEqual(mine["last_triggered"], fresh)
+
+    def test_proposals_suppress_stale_last_triggered(self):
+        # Nov 2 bug, reproduced: a stamp predating the proposal (the
+        # previous rule's fire, restored onto a reused entity_id)
+        # must read as never fired, not as this rule's fire.
+        pid = make_bound_photo(self.client, w=521)
+        first = self.client.post("/api/automations/propose",
+                                 json={"photo_id": pid, "source_object_id": "door",
+                                       "target_object_id": "lamp", "text": ""}).json()
+        self.client.post(f"/api/automations/{first['proposal_id']}/approve")
+        HA_STATES.append({"entity_id": "automation.hometwin_patio_door_to_lamp",
+                          "state": "on",
+                          "attributes": {"id": f"hometwin_{first['proposal_id']}",
+                                         "last_triggered": "2026-11-01T20:46:41+00:00"}})
+        try:
+            listed = self.client.get("/api/automations/proposals",
+                                     params={"photo_id": pid}).json()["proposals"]
+        finally:
+            HA_STATES.pop()
+        mine = next(p for p in listed if p["id"] == first["proposal_id"])
+        self.assertIsNone(mine["last_triggered"])
 
     def test_propose_unbound_source_conflicts(self):
         pid = make_bound_photo(self.client, w=516)

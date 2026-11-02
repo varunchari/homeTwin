@@ -470,6 +470,10 @@ document.getElementById("plan-btn").addEventListener("click", async () => {
       btn.textContent = label;
       say(`${label}.`);
       await refreshProposals();
+      // Reload entities so the board/Devices pick up the backend's
+      // stale-stamp-filtered last_triggered, not the restored stamp
+      // HA's automation-reload WS event carries for a reused entity_id.
+      await load();
     } else {
       btn.disabled = false;
       btn.textContent = "Approve & deploy";
@@ -783,6 +787,9 @@ document.getElementById("move-btn").addEventListener("click", async () => {
     noBtn.textContent = "Decline";
     noBtn.addEventListener("click", () => {
       moveView.innerHTML = "";
+      // The dock mirrors the move preview too: declining must close
+      // it, not just the panel (Nov 2 test: dock stayed open).
+      hidePreview();
       say("Move declined — nothing changed.");
     });
     div.appendChild(okBtn);
@@ -886,6 +893,11 @@ function resetTmInputs() {
   }
   if (hour) hour.value = String(now.getHours()).padStart(2, "0");
   if (min) min.value = String(now.getMinutes()).padStart(2, "0");
+  // Value-matching can silently fail if an option's value format ever
+  // drifts from the padded form (Nov 2 test: Minute 00 would not land
+  // by click). Index is format-proof, so fall back to it.
+  if (hour && hour.value !== String(now.getHours()).padStart(2, "0")) hour.selectedIndex = now.getHours();
+  if (min && min.value !== String(now.getMinutes()).padStart(2, "0")) min.selectedIndex = now.getMinutes();
 }
 document.getElementById("tm-view-btn").addEventListener("click", async () => {
   const date = document.getElementById("tm-date").value;
@@ -969,6 +981,15 @@ document.getElementById("reset-btn").addEventListener("click", async () => {
   if (advisorText) advisorText.value = "cozy evening";
   const todVariant = document.getElementById("tod-variant");
   if (todVariant) todVariant.value = "morning";
+  // Nov 2 test residuals: Automate model/delay and the Time Machine
+  // error line survived Reset. A reset must restore every input,
+  // not just the ones that were already handled above.
+  const autoProvider = document.getElementById("auto-provider");
+  if (autoProvider) autoProvider.value = "hosted";
+  const autoDelay = document.getElementById("auto-delay");
+  if (autoDelay) autoDelay.value = "";
+  const tmViewReset = document.getElementById("tm-view");
+  if (tmViewReset) tmViewReset.innerHTML = "";
   resetTmInputs();
   tapped = false;
   whatifDone = false;
