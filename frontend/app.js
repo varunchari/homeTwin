@@ -192,6 +192,25 @@ for (const p of SUGGESTED) {
 
 function say(msg) { photoMsg.textContent = msg; }
 
+// Pin/box/screen coordinates are fractions of the PHOTO, not its container.
+// The hero caps photo height, so wide viewports letterbox the image —
+// without this, every overlay drifts into the black bars. Inset #regions to
+// the image's rendered box on load, resize, and every regions render.
+function fitRegions() {
+  if (!photoEl || photoEl.hidden || !photoEl.naturalWidth) return;
+  const wrap = photoEl.parentElement.getBoundingClientRect();
+  const img = photoEl.getBoundingClientRect();
+  regionsEl.style.left = `${img.left - wrap.left}px`;
+  regionsEl.style.top = `${img.top - wrap.top}px`;
+  regionsEl.style.width = `${img.width}px`;
+  regionsEl.style.height = `${img.height}px`;
+  regionsEl.style.right = "auto";
+  regionsEl.style.bottom = "auto";
+}
+if (typeof window !== "undefined") {
+  window.addEventListener("resize", fitRegions);
+}
+
 function fmtFired(iso) {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? String(iso) : d.toLocaleString();
@@ -312,6 +331,7 @@ function shortPinLabel(oid) {
 }
 
 function updatePins() {
+  fitRegions();
   for (const pin of regionsEl.querySelectorAll(".pin")) {
     const entity = bindings[pin.dataset.oid];
     pin.textContent = shortPinLabel(pin.dataset.oid);
@@ -367,6 +387,7 @@ function deselect() {
 }
 document.getElementById("sheet-close").addEventListener("click", deselect);
 photoEl.addEventListener("click", () => { if (!drawing) deselect(); });
+photoEl.addEventListener("load", fitRegions);
 
 function showSelected(objectId) {
   const info = document.getElementById("selected-info");
