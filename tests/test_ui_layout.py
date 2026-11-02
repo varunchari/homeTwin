@@ -153,7 +153,7 @@ class UIFixesTest(unittest.TestCase):
         # Board stays hidden and folded until a photo exists.
         self.assertIn('<details id="live-board" hidden>', self.html)
         self.assertIn('document.getElementById("live-board").hidden = false;', self.js)
-        self.assertIn("#preview-dock img { max-height: 40vh;", self.css)
+        self.assertIn("#preview-dock img { width: 100%; height: 38vh; object-fit: cover; }", self.css)
         self.assertIn("#live-devices, #live-automations { max-height: 35vh;", self.css)
 
 

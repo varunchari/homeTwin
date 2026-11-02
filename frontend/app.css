@@ -307,7 +307,7 @@ body.guest .guest-hide { display: none !important; }
 #live-automations .dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; background: #5a636d; display: inline-block; }
 #live-automations .dot.on { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
 #preview-dock summary, #live-board summary { cursor: pointer; font-weight: 600; font-size: 0.95rem; }
-#preview-dock img { max-height: 40vh; object-fit: cover; }
+#preview-dock img { width: 100%; height: 38vh; object-fit: cover; }
 #live-devices, #live-automations { max-height: 35vh; overflow-y: auto; }
 #live-devices li, #live-automations li { justify-content: flex-start; }
 #live-devices .board-name { flex: 1; }

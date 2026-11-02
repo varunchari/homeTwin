@@ -1100,7 +1100,6 @@ document.getElementById("reset-btn").addEventListener("click", async () => {
   await refreshScenes();
   if (typeof advisorView !== "undefined" && advisorView) advisorView.innerHTML = "";
   if (typeof todView !== "undefined" && todView) todView.innerHTML = "";
-  if (typeof advisorPreviewWrap !== "undefined" && advisorPreviewWrap) advisorPreviewWrap.hidden = true;
   hidePreview();
   if (typeof voiceTranscript !== "undefined" && voiceTranscript) voiceTranscript.hidden = true;
   if (typeof voiceAction !== "undefined" && voiceAction) voiceAction.innerHTML = "";
@@ -1268,8 +1267,6 @@ photoWrap.addEventListener("pointerup", async (ev) => {
 // Preview shows an illustrative image, Apply is the only HA write, and
 // Decline (clearing the panel) changes nothing.
 const advisorView = document.getElementById("advisor-view");
-const advisorPreviewWrap = document.getElementById("advisor-preview-wrap");
-const advisorPreview = document.getElementById("advisor-preview");
 const todView = document.getElementById("tod-view");
 function advisorActionsText(setting) {
   return (setting.actions || []).map((a) =>
@@ -1346,8 +1343,8 @@ document.getElementById("advisor-btn").addEventListener("click", async () => {
       previewBtn.disabled = false;
       previewBtn.textContent = "Preview (illustrative)";
       if (!r2.ok) { say(`Preview failed: ${b2.detail || r2.status}`); return; }
-      advisorPreview.src = b2.preview_url;
-      advisorPreviewWrap.hidden = false;
+      // Preview lives in the dock only — a second inline copy doubles the
+      // page for no reason. The dock label keeps the illustrative tag.
       showPreview(b2.preview_url, "Illustrative advisor preview", setting.name);
       say(`Illustrative preview ready via ${b2.model}. Approving applies only the listed light actions.`);
     });
@@ -1361,7 +1358,6 @@ document.getElementById("advisor-btn").addEventListener("click", async () => {
   decline.textContent = "Decline — change nothing";
   decline.addEventListener("click", () => {
     advisorView.innerHTML = "";
-    advisorPreviewWrap.hidden = true;
     hidePreview();
     say("Declined. Nothing changed in Home Assistant.");
   });
@@ -1390,11 +1386,8 @@ document.getElementById("tod-btn").addEventListener("click", async () => {
   div.className = "plan";
   div.innerHTML = `<strong>${body.label}</strong> — illustrative preview<br />${body.description}` +
     `<br /><span class="muted">${advisorActionsText(body.setting)}</span>`;
-  const img = document.createElement("img");
-  img.src = body.preview_url;
-  img.alt = `${body.label} illustrative preview`;
+  // Same dock-only rule as advisor previews: no second inline copy.
   showPreview(body.preview_url, `${body.label} illustrative preview`, body.label);
-  div.appendChild(img);
   div.appendChild(advisorApplyButton(body.setting, "Apply matching settings"));
   todView.appendChild(div);
   say(`${body.label} preview ready (illustrative). Apply to set the matching lights.`);
