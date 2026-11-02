@@ -46,6 +46,8 @@ function renderLiveBoard() {
   const devEl = document.getElementById("live-devices");
   const autoEl = document.getElementById("live-automations");
   if (!devEl || !autoEl) return;
+  const title = document.getElementById("live-board-title");
+  if (title) title.textContent = timeTravel ? "Room as it was" : "Live in this room";
   devEl.innerHTML = ""; autoEl.innerHTML = "";
   for (const [id, st] of shownStates()) {
     if (id.startsWith("automation.")) {
