@@ -41,8 +41,6 @@ class UILayoutTest(unittest.TestCase):
         self.assertNotIn("guest-hide", board)
 
     def test_all_preview_paths_mirror_into_dock(self):
-        for label in ("move", "advisor", "time-of-day"):
-            pass
         self.assertIn('showPreview(b2.preview_url, "Illustrative move preview")', self.js)
         self.assertIn('showPreview(b2.preview_url, "Illustrative advisor preview")', self.js)
         self.assertIn('showPreview(body.preview_url, `${body.label} illustrative preview`)', self.js)

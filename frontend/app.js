@@ -52,8 +52,11 @@ function renderLiveBoard() {
       dot.className = "dot" + (st === "on" ? " on" : "");
       const name = document.createElement("span");
       const last = (stateAttrs.get(id) || {}).last_triggered;
+      // In a past view the last-fired stamp would leak live data into the
+      // frozen view, so it is shown live-only — same rule as the Devices list.
+      const showLast = !timeTravel && last;
       name.textContent = prettyEntity(id) + (st === "on" ? " (on)" : " (off)") +
-        (last ? ` — last fired ${fmtFired ? fmtFired(last) : last}` : " — never fired");
+        (showLast ? ` — last fired ${fmtFired(last)}` : (timeTravel ? "" : " — never fired"));
       li.appendChild(dot); li.appendChild(name); autoEl.appendChild(li);
       continue;
     }
@@ -84,9 +87,14 @@ function render() {
     if (id.startsWith("automation.")) {
       const fired = document.createElement("span");
       fired.className = "fired";
-      const lt = (stateAttrs.get(id) || {}).last_triggered;
-      fired.textContent = lt ? `last fired ${fmtFired(lt)}` : "never fired";
-      fired.title = lt ? `last_triggered: ${lt}` : "this rule has not fired yet";
+      const lt = timeTravel ? null : (stateAttrs.get(id) || {}).last_triggered;
+      if (timeTravel) {
+        // Snapshots carry states, not fire times: no stamp, no "never fired".
+        fired.hidden = true;
+      } else {
+        fired.textContent = lt ? `last fired ${fmtFired(lt)}` : "never fired";
+        fired.title = lt ? `last_triggered: ${lt}` : "this rule has not fired yet";
+      }
       li.appendChild(fired);
     }
     listEl.appendChild(li);
