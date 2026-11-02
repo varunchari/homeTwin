@@ -59,7 +59,7 @@ body {
 .panel {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
-  gap: 1.25rem; align-items: start;
+  gap: 1.25rem; align-items: stretch;
 }
 .panel section {
   background: var(--panel); border: 1px solid #2a343e;

@@ -78,7 +78,7 @@
         <p class="muted">Illustrative preview — not a calibrated simulation, not photometrically accurate. Approving a setting applies only supported light on/off actions in Home Assistant. The controls that apply it stay in the right panel; this dock only mirrors the image next to the live room so it can be compared with it.</p>
         <button id="preview-dock-hide" class="btn">Hide preview</button>
       </details>
-      <details id="live-board" open hidden>
+      <details id="live-board" hidden>
         <summary id="live-board-title">Live in this room</summary>
         <p class="muted">Devices and automations, next to the photo.</p>
         <ul id="live-devices" class="devices"></ul>
@@ -92,8 +92,8 @@
         <button id="suggest-btn" class="btn primary" disabled title="Choose a photo first">Suggest bindings</button>
         <ul id="proposal-list" class="proposals"></ul>
       </section>
-      <section class="guest-hide">
-        <h2>4 · Automate</h2>
+      <details class="fold guest-hide" id="automate-fold">
+        <summary>4 · Automate</summary>
         <div id="auto-row">
           <select id="source-select" title="Trigger region"></select>
           <span class="arrow">→</span>
@@ -114,7 +114,7 @@
         </div>
         <button id="plan-btn" class="btn primary" disabled title="Bind a region first">Generate plan</button>
         <div id="plan-view"></div>
-      </section>
+      </details>
       <section class="guest-hide">
         <h2>Voice</h2>
         <p class="muted">Push-to-talk: hold, speak, release. Transcript always shown; typing still works.</p>
