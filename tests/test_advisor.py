@@ -28,6 +28,19 @@ def setting(name, actions):
             "actions": [{"entity_id": e, "service": s} for e, s in actions]}
 
 
+class PreviewPromptTest(unittest.TestCase):
+    def test_prompt_pins_room_and_lighting_delta(self):
+        from advisor import advisor_preview_prompt
+
+        p = advisor_preview_prompt(setting(
+            "Cozy", [("light.reading_light", "light.turn_on"),
+                     ("light.floor_lamp", "light.turn_off")]))
+        self.assertIn("Edit this exact room photo", p)
+        self.assertIn("Cozy", p)
+        self.assertIn("reading light", p)
+        self.assertIn("floor lamp", p)
+
+
 class ValidateTest(unittest.TestCase):
     def test_two_valid_settings_pass(self):
         settings = [
@@ -203,6 +216,26 @@ class AdvisorEndpointTest(unittest.TestCase):
         image_client.edit_image = self._saved_edit
         proxy._ha_service = self._saved_service
 
+    def test_preview_edits_room_photo_never_generates(self):
+        async def exploding_generate(prompt):
+            raise AssertionError("advisor preview must edit the photo, not generate")
+
+        image_client.generate_image = exploding_generate
+        try:
+            pid = make_photo(self.client)
+            body = self.client.post("/api/advisor/suggest",
+                                    json={"photo_id": pid,
+                                          "request_text": "cozy evening"}).json()
+            preview = self.client.post("/api/advisor/preview",
+                                       json={"photo_id": pid,
+                                             "setting": body["settings"][0],
+                                             "request_text": "cozy evening"}).json()
+            self.assertTrue(preview["preview_url"].startswith("/api/advisor/previews/"))
+            img = self.client.get(preview["preview_url"])
+            self.assertEqual(img.content, b"\x89PNGfake-variant")
+        finally:
+            image_client.generate_image = fake_generate
+
     def test_suggest_preview_apply_and_decline_shape(self):
         pid = make_photo(self.client)
         body = self.client.post("/api/advisor/suggest",
@@ -218,11 +251,89 @@ class AdvisorEndpointTest(unittest.TestCase):
         self.assertTrue(preview["preview_url"].startswith("/api/advisor/previews/"))
         img = self.client.get(preview["preview_url"])
         self.assertEqual(img.status_code, 200)
-        self.assertEqual(img.content, b"\x89PNGfake-preview")
+        self.assertEqual(img.content, b"\x89PNGfake-variant")
         applied = self.client.post("/api/advisor/apply",
                                    json={"setting": body["settings"][0]}).json()
         self.assertTrue(applied["ok"])
         self.assertIn("light/turn_on", SERVICE_CALLS)
+
+    def test_shrink_downscales_longest_edge(self):
+        from PIL import Image
+
+        from image_client import shrink_for_edit
+
+        buf = io.BytesIO()
+        Image.new("RGB", (1920, 1280), (5, 5, 5)).save(buf, "JPEG")
+        small = shrink_for_edit(buf.getvalue())
+        out = Image.open(io.BytesIO(small))
+        self.assertEqual(max(out.size), 1024)
+        self.assertLess(len(small), len(buf.getvalue()))
+        tiny = Image.new("RGB", (100, 80), (5, 5, 5))
+        tbuf = io.BytesIO()
+        tiny.save(tbuf, "JPEG")
+        self.assertEqual(shrink_for_edit(tbuf.getvalue()), tbuf.getvalue())
+
+    def _unique_photo(self):
+        from PIL import Image
+
+        buf = io.BytesIO()
+        Image.new("RGB", (500, 300), (9, 9, 9)).save(buf, "JPEG")
+        saved = proxy.segment_image
+        proxy.segment_image = _no_sam
+        try:
+            return self.client.post(
+                "/api/photos", files={"file": ("r.jpg", buf.getvalue(), "image/jpeg")}
+            ).json()["photo_id"]
+        finally:
+            proxy.segment_image = saved
+
+    def test_advisor_preview_cached_second_time(self):
+        calls = []
+        real_edit = image_client.edit_image
+
+        async def counting_edit(image_bytes, prompt):
+            calls.append(prompt)
+            return await real_edit(image_bytes, prompt)
+
+        image_client.edit_image = counting_edit
+        try:
+            pid = self._unique_photo()
+            setting = {"name": "CacheProbeUnique", "description": "probe",
+                       "actions": [{"entity_id": "light.reading_light",
+                                    "service": "light.turn_on"}]}
+            first = self.client.post("/api/advisor/preview",
+                                     json={"photo_id": pid, "setting": setting,
+                                           "request_text": "probe"}).json()
+            second = self.client.post("/api/advisor/preview",
+                                      json={"photo_id": pid, "setting": setting,
+                                            "request_text": "probe"}).json()
+        finally:
+            image_client.edit_image = real_edit
+        self.assertEqual(len(calls), 1)
+        self.assertFalse(first.get("cached", False))
+        self.assertTrue(second["cached"])
+        self.assertEqual(first["preview_url"], second["preview_url"])
+
+    def test_time_of_day_cached_second_time(self):
+        calls = []
+        real_edit = image_client.edit_image
+
+        async def counting_edit(image_bytes, prompt):
+            calls.append(prompt)
+            return await real_edit(image_bytes, prompt)
+
+        image_client.edit_image = counting_edit
+        try:
+            pid = self._unique_photo()
+            first = self.client.post("/api/advisor/time-of-day",
+                                     json={"photo_id": pid, "variant": "sunset"}).json()
+            second = self.client.post("/api/advisor/time-of-day",
+                                      json={"photo_id": pid, "variant": "sunset"}).json()
+        finally:
+            image_client.edit_image = real_edit
+        self.assertEqual(len(calls), 1)
+        self.assertTrue(second["cached"])
+        self.assertEqual(first["preview_url"], second["preview_url"])
 
     def test_suggest_rejects_bad_model_output(self):
         async def bad(system, user, schema, model="x", api_base=None, api_key=None):

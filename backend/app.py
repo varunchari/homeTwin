@@ -1266,20 +1266,26 @@ async def move_preview(request: Request, photo_id: int,
         raise HTTPException(status_code=404, detail="unknown move proposal")
     _photo, raw = _photo_bytes(req.photo_id)
     _graph, region = _move_region(req.photo_id, proposal["object_id"])
+    prompt = (f"Move the {region['phrase']} to the "
+              f"{'left' if proposal['x'] < region['x'] else 'right'} side of the room, "
+              f"{'upper' if proposal['y'] < region['y'] else 'lower'} area, keeping "
+              "everything else in this room photo exactly the same")
+    key = _preview_key(raw, prompt)
+    if _cached_preview(key):
+        return {"move_id": req.move_id, "preview_url": f"/api/advisor/previews/{key}",
+                "illustrative": True, "to_xy": [proposal["x"], proposal["y"]],
+                "cached": True}
     t0 = time.monotonic()
     try:
-        image_bytes = await edit_image(
-            raw, f"Move the {region['phrase']} to the "
-            f"{'left' if proposal['x'] < region['x'] else 'right'} side of the room, "
-            f"{'upper' if proposal['y'] < region['y'] else 'lower'} area, keeping "
-            "everything else in this room photo exactly the same")
+        image_bytes = await edit_image(raw, prompt)
     except ImageError as e:
         raise HTTPException(status_code=502, detail=f"image preview failed: {e}")
     latency_ms = int((time.monotonic() - t0) * 1000)
-    name = _save_preview(image_bytes)
+    name = _save_preview_named(image_bytes, key)
     _log_image_call("move-preview", latency_ms, IMAGE_MODEL)
     return {"move_id": req.move_id, "preview_url": f"/api/advisor/previews/{name}",
-            "illustrative": True, "to_xy": [proposal["x"], proposal["y"]]}
+            "illustrative": True, "to_xy": [proposal["x"], proposal["y"]],
+            "cached": False}
 
 
 @app.post("/api/photos/{photo_id}/move-approve")
@@ -1380,6 +1386,25 @@ def _save_preview(image_bytes: bytes) -> str:
     return name
 
 
+def _preview_key(photo_bytes: bytes, prompt: str) -> str:
+    """Content address for a preview: same room + same instruction reuses
+    the stored file instead of spending a second generation."""
+    import hashlib
+
+    return hashlib.sha256(photo_bytes + b"\x00" + prompt.encode()).hexdigest()[:32]
+
+
+def _cached_preview(key: str) -> str | None:
+    return key if (DATA_DIR / "advisor_previews" / key).is_file() else None
+
+
+def _save_preview_named(image_bytes: bytes, key: str) -> str:
+    previews_dir = DATA_DIR / "advisor_previews"
+    previews_dir.mkdir(parents=True, exist_ok=True)
+    (previews_dir / key).write_bytes(image_bytes)
+    return key
+
+
 def _log_image_call(kind: str, latency_ms: int, model: str) -> None:
     import json
     import time
@@ -1456,32 +1481,42 @@ async def advisor_suggest(request: Request, req: AdvisorSuggestRequest) -> dict:
 
 @app.post("/api/advisor/preview")
 async def advisor_preview(request: Request, req: AdvisorPreviewRequest) -> dict:
-    """Illustrative Muse Image preview for one chosen setting. No HA write."""
+    """Illustrative Muse Image edit of the room photo for one chosen
+    setting. Text-only generation could never resemble the room, so the
+    photo is always the edit source. No HA write."""
     import time
     from advisor import advisor_preview_prompt, validate_settings
-    from image_client import IMAGE_MODEL, ImageError, generate_image
+    from image_client import IMAGE_MODEL, ImageError, edit_image
 
-    if not get_photo(req.photo_id):
-        raise HTTPException(status_code=404, detail="unknown photo")
+    _photo, raw = _photo_bytes(req.photo_id)
     registry = {s.get("entity_id") for s in await _ha_states()}
     setting = req.setting.model_dump()
     reasons = validate_settings([setting], registry)
     if reasons:
         raise HTTPException(status_code=422, detail="; ".join(reasons))
     _limit_model(request)
+    prompt = advisor_preview_prompt(setting)
+    key = _preview_key(raw, prompt)
+    if _cached_preview(key):
+        media_type, _ext = _preview_media_type(
+            (DATA_DIR / "advisor_previews" / key).read_bytes())
+        return {"preview_url": f"/api/advisor/previews/{key}",
+                "media_type": media_type, "setting": setting,
+                "latency_ms": 0, "model": IMAGE_MODEL,
+                "illustrative": True, "cached": True}
     t0 = time.monotonic()
     try:
-        image_bytes = await generate_image(advisor_preview_prompt(setting))
+        image_bytes = await edit_image(raw, prompt)
     except ImageError as e:
         raise HTTPException(status_code=502, detail=str(e))
     latency_ms = int((time.monotonic() - t0) * 1000)
-    name = _save_preview(image_bytes)
+    name = _save_preview_named(image_bytes, key)
     media_type, _ext = _preview_media_type(image_bytes)
     _log_image_call("advisor", latency_ms, IMAGE_MODEL)
     return {"preview_url": f"/api/advisor/previews/{name}",
             "media_type": media_type, "setting": setting,
             "latency_ms": latency_ms, "model": IMAGE_MODEL,
-            "illustrative": True}
+            "illustrative": True, "cached": False}
 
 
 @app.post("/api/advisor/apply")
@@ -1525,24 +1560,28 @@ async def time_of_day_preview(request: Request, req: TimeOfDayRequest) -> dict:
     if reasons:
         raise HTTPException(status_code=422, detail="; ".join(reasons))
     _limit_model(request)
+    key = _preview_key(raw, preset["image_prompt"])
+    setting = {"name": preset["label"], "description": preset["description"],
+               "actions": preset["actions"]}
+    base = {"variant": req.variant, "label": preset["label"],
+            "description": preset["description"], "setting": setting,
+            "model": IMAGE_MODEL, "illustrative": True}
+    if _cached_preview(key):
+        media_type, _ext = _preview_media_type(
+            (DATA_DIR / "advisor_previews" / key).read_bytes())
+        return {**base, "preview_url": f"/api/advisor/previews/{key}",
+                "media_type": media_type, "latency_ms": 0, "cached": True}
     t0 = time.monotonic()
     try:
         image_bytes = await edit_image(raw, preset["image_prompt"])
     except ImageError as e:
         raise HTTPException(status_code=502, detail=str(e))
     latency_ms = int((time.monotonic() - t0) * 1000)
-    name = _save_preview(image_bytes)
+    name = _save_preview_named(image_bytes, key)
     media_type, _ext = _preview_media_type(image_bytes)
     _log_image_call(f"time-of-day:{req.variant}", latency_ms, IMAGE_MODEL)
-    return {"variant": req.variant, "label": preset["label"],
-            "description": preset["description"],
-            "preview_url": f"/api/advisor/previews/{name}",
-            "media_type": media_type,
-            "setting": {"name": preset["label"],
-                        "description": preset["description"],
-                        "actions": preset["actions"]},
-            "latency_ms": latency_ms, "model": IMAGE_MODEL,
-            "illustrative": True}
+    return {**base, "preview_url": f"/api/advisor/previews/{name}",
+            "media_type": media_type, "latency_ms": latency_ms, "cached": False}
 
 
 @app.get("/api/advisor/previews/{name}")

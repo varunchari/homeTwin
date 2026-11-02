@@ -66,3 +66,8 @@ Baseten A/B rows (Oct 30 only): record model string as shown in the Baseten dash
 - Fix: time_zone America/Los_Angeles in ha/configuration.yaml (matches Portland demo location), deployed, HA restarted.
 - Proof: pristine reset -> rebind -> sunset proposal #43 (hosted, 6699 ms) -> approve hometwin_43 -> door tap: reading light ON at T+10 s, last_triggered 2026-11-02T04:15:00Z, no manual tap.
 - Cleaned up after: reset deleted hometwin_43, ghost registry entries scrubbed, HA restarted, 0 automations verified.
+
+## 2026-11-02 — Preview cost + anchored prompts (feat/preview-cleanup follow-up)
+- Advisor/move/time-of-day prompts now anchor to the detected setting: fixtures (lamp positions, TV, display, sofa, windows) must stay put; the edit changes only light mood/glow or the single named lamp move. Room-context fixtures appended to every prompt.
+- Image input downscaled to longest edge 1024 (`shrink_for_edit`) before every edit call; content-addressed cache (sha256 photo + prompt) serves repeat previews with `cached: true`.
+- Tests: 149 -> 152 (shrink unit + advisor-cache + tod-cache). Suite green.

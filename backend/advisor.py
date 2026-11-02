@@ -154,12 +154,26 @@ TIME_OF_DAY_PRESETS = {
 }
 
 
+def _friendly(entity_id: str) -> str:
+    return entity_id.replace("light.", "").replace("_", " ")
+
+
 def advisor_preview_prompt(setting: dict) -> str:
-    on = [a["entity_id"].replace("light.", "").replace("_", " ")
-          for a in setting.get("actions", [])
+    """Room-anchored edit instruction: the model edits THIS photo, so the
+    prompt must pin layout/camera/furniture and name only the lighting
+    delta. A generic 'cozy room' prompt is what produced rooms that look
+    nothing like the user's."""
+    on = [_friendly(a["entity_id"]) for a in setting.get("actions", [])
           if a.get("service") == "light.turn_on"]
+    off = [_friendly(a["entity_id"]) for a in setting.get("actions", [])
+           if a.get("service") == "light.turn_off"]
     on_text = ", ".join(on) if on else "no lamps on"
+    off_text = ", ".join(off) if off else "nothing off"
     return (
-        f"Illustrative cozy room interior for '{setting.get('name', '')}': "
-        f"{setting.get('description', '')} Lamps on: {on_text}. "
-        "Warm, lived-in evening mood, illustrative only.")
+        "Edit this exact room photo and nothing else: keep the same room, "
+        "layout, furniture, camera angle, window and doors. Change ONLY the "
+        f"lighting to match '{setting.get('name', '')}': "
+        f"{setting.get('description', '')} "
+        f"Lights ON (glow warmly): {on_text}. "
+        f"Lights OFF (stay dark): {off_text}. "
+        "Illustrative lighting edit of this room only.")
