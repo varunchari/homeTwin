@@ -765,10 +765,19 @@ function lockControls(lock) {
     if (photoId) { refreshGraph(); refreshProposals(); }
   }
 }
+function resetTmInputs() {
+  // Separate date + time pickers: unlike datetime-local, each popup commits
+  // its selection on click, so no segment-by-segment keyboard entry.
+  const date = document.getElementById("tm-date");
+  const time = document.getElementById("tm-time");
+  if (date) date.valueAsDate = new Date();
+  if (time) time.value = "";
+}
 document.getElementById("tm-view-btn").addEventListener("click", async () => {
-  const input = document.getElementById("tm-when");
-  if (!input.value) { say("Pick a date and time first."); return; }
-  const ts = Math.floor(new Date(input.value).getTime() / 1000);
+  const date = document.getElementById("tm-date").value;
+  const time = document.getElementById("tm-time").value || "00:00";
+  if (!date) { say("Pick a date first."); return; }
+  const ts = Math.floor(new Date(`${date}T${time}`).getTime() / 1000);
   if (Number.isNaN(ts)) { say("That date did not parse."); return; }
   const res = await fetch(`/api/state-at?ts=${ts}`);
   const body = await res.json();
@@ -843,8 +852,7 @@ document.getElementById("reset-btn").addEventListener("click", async () => {
   if (advisorText) advisorText.value = "cozy evening";
   const todVariant = document.getElementById("tod-variant");
   if (todVariant) todVariant.value = "morning";
-  const tmWhen = document.getElementById("tm-when");
-  if (tmWhen) tmWhen.value = "";
+  resetTmInputs();
   tapped = false;
   whatifDone = false;
   updateSteps();
@@ -1263,6 +1271,7 @@ async function toWav16k(blob) {
   }
 }
 
+resetTmInputs();
 load().then(connect);
 if (isGuest) {
   // Guests cannot upload or segment, so start them on the frozen demo room.
