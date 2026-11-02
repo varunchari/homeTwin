@@ -59,3 +59,10 @@ Baseten A/B rows (Oct 30 only): record model string as shown in the Baseten dash
 - Tap simulated door on; reading light stayed off across 12 x 10 s polls — correct daytime non-fire, consistent with What-If day=False, but NOT the sunset proof.
 - Re-armed afterwards: door tapped back off; rule hometwin_35 still on; door off, reading off.
 - Second one-shot check scheduled for 18:10 PDT Nov 1 with an off-to-on guard.
+## 2026-11-01 - Sunset live fire OBSERVED (proposal #43, timezone root cause)
+- Pre-check found no rule deployed (fresh reset had cleared hometwin_35) under a below_horizon sun — nothing could have fired.
+- Control: no-condition rule #42 at night fired in 10 s (door on -> reading on, last_triggered set) — trigger path proven live.
+- Sunset rule #41 under the same sun never triggered (last_triggered null): not the sun state (elevation -32 deg) but the sun CONDITION. Root cause: HA time_zone was UTC, and the sun condition anchors "today" to the HA zone — at 04:11 UTC Nov 2, "today's" sunset lay ~20 h in the future, so after-sunset was false all evening PDT.
+- Fix: time_zone America/Los_Angeles in ha/configuration.yaml (matches Portland demo location), deployed, HA restarted.
+- Proof: pristine reset -> rebind -> sunset proposal #43 (hosted, 6699 ms) -> approve hometwin_43 -> door tap: reading light ON at T+10 s, last_triggered 2026-11-02T04:15:00Z, no manual tap.
+- Cleaned up after: reset deleted hometwin_43, ghost registry entries scrubbed, HA restarted, 0 automations verified.
