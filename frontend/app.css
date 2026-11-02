@@ -279,6 +279,11 @@ body.guest .guest-hide { display: none !important; }
 #live-devices, #live-automations { list-style: none; padding: 0; margin: 0.5rem 0; }
 #live-devices li, #live-automations li { display: flex; gap: 0.5rem; align-items: center; padding: 0.25rem 0; font-size: 0.85rem; }
 #live-devices .dot, #live-automations .dot { flex: none; }
+#live-automations .dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; background: #5a636d; display: inline-block; }
+#live-automations .dot.on { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+#preview-dock summary, #live-board summary { cursor: pointer; font-weight: 600; font-size: 0.95rem; }
+#preview-dock img { max-height: 40vh; object-fit: cover; }
+#live-devices, #live-automations { max-height: 35vh; overflow-y: auto; }
 @media (max-width: 60rem) {
   .canvas-card { position: static; max-height: none; overflow: visible; }
 }

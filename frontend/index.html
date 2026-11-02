@@ -63,18 +63,19 @@
           <button id="unbind-btn" class="btn">Unbind</button>
         </div>
       </section>
-      <section id="preview-dock" hidden>
-        <h3>Preview <span class="muted">illustrative — not the live room</span></h3>
+      <details id="preview-dock" hidden open>
+        <summary>Preview <span class="muted">illustrative — not the live room</span></summary>
+        <p id="preview-dock-label" class="muted"></p>
         <img id="preview-dock-img" alt="Illustrative preview" hidden />
         <p class="muted">Illustrative preview — not a calibrated simulation, not photometrically accurate. Approving a setting applies only supported light on/off actions in Home Assistant. The controls that apply it stay in the right panel; this dock only mirrors the image next to the live room so it can be compared with it.</p>
         <button id="preview-dock-hide" class="btn">Hide preview</button>
-      </section>
-      <section id="live-board">
-        <h3>Live in this room</h3>
+      </details>
+      <details id="live-board" open>
+        <summary>Live in this room</summary>
         <p class="muted">Mirrors Devices and automations, next to the photo, so a change is visible without scrolling to the bottom of the panel.</p>
         <ul id="live-devices" class="devices"></ul>
         <ul id="live-automations" class="proposals"></ul>
-      </section>
+      </details>
     </section>
 
     <aside class="panel">
