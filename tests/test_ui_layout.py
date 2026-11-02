@@ -92,6 +92,16 @@ class UIPolishTest(unittest.TestCase):
         self.assertIn('<details class="fold guest-hide" id="automate-fold">', self.html)
         self.assertIn("gap: 1.25rem; align-items: stretch;", self.css)
 
+    def test_regions_grouped_by_phrase_with_one_delete(self):
+        self.assertIn("regionGroups[r.phrase]", self.js)
+        self.assertIn('head.className = "phrase-head";', self.js)
+        self.assertIn("/phrases/${encodeURIComponent(phrase)}", self.js)
+        self.assertIn(".phrase-head", self.css)
+
+    def test_overlays_and_draw_share_picture_rect(self):
+        self.assertIn("function photoRect()", self.js)
+        self.assertIn("const rect = photoRect();", self.js)
+
 
 if __name__ == "__main__":
     unittest.main()

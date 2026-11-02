@@ -504,6 +504,9 @@ def _iou(a: tuple, b: tuple) -> float:
     return ix * iy / union if union > 0 else 0.0
 
 
+MAX_REGIONS_PER_SEGMENT = 5
+
+
 def _dedupe(rels: list[tuple]) -> list[dict]:
     """Merge near-duplicate boxes (IoU > 0.9), preferring the entry with a mask.
 
@@ -555,6 +558,9 @@ async def _run_segmentation(photo_id: int, photo: dict, raw: bytes,
                 "latency_ms": total_ms, "regions": []}
     # Refresh semantics: re-segmenting a phrase replaces its regions instead
     # of duplicating them. Bindings to vanished object_ids are dropped.
+    # Spray guard: one click must never add 23 regions. Candidates that
+    # duplicate an existing region (any other phrase) are suppressed, and the
+    # rest is capped to the largest few — SAM sprays small fragments first.
     removed = delete_phrase_regions(photo_id, matched)
     rels = []
     for item in found:
@@ -562,15 +568,27 @@ async def _run_segmentation(photo_id: int, photo: dict, raw: bytes,
         if rel is None:
             continue
         rels.append((rel, item["mask_png"]))
-    regions = []
+    graph = scene_graph(photo_id) or {}
+    others = [(r["x"], r["y"], r["w"], r["h"])
+              for r in graph.get("regions", []) if r["phrase"] != matched]
+    fresh, suppressed = [], 0
     for entry in _dedupe(rels):
+        if any(_iou(entry["rel"], box) > 0.9 for box in others):
+            suppressed += 1
+            continue
+        fresh.append(entry)
+    fresh.sort(key=lambda e: e["rel"][2] * e["rel"][3], reverse=True)
+    suppressed += max(0, len(fresh) - MAX_REGIONS_PER_SEGMENT)
+    regions = []
+    for entry in fresh[:MAX_REGIONS_PER_SEGMENT]:
         regions.append(add_region(photo_id, "sam", matched, *entry["rel"],
                                   mask_png=entry["mask_png"]))
     kept = {r["object_id"] for r in regions}
     dropped_bindings = [o for o in removed if o not in kept and delete_binding(photo_id, o)]
     return {"phrase": phrase, "matched_phrase": matched,
             "latency_ms": total_ms, "regions": regions,
-            "replaced": len(removed), "dropped_bindings": dropped_bindings}
+            "replaced": len(removed), "dropped_bindings": dropped_bindings,
+            "suppressed": suppressed}
 
 
 @app.post("/api/photos/{photo_id}/segment")
@@ -1664,6 +1682,20 @@ async def reset_baseline() -> dict:
             "automations_cleared": cleared, "history_cleared": history_cleared,
             "bindings_cleared": bindings_cleared,
             "moves_restored": moves_restored, "scenes_cleared": scenes_cleared}
+
+
+@app.delete("/api/photos/{photo_id}/phrases/{phrase}")
+async def delete_phrase(photo_id: int, phrase: str) -> dict:
+    """Remove every region of one phrase in one click (oops recovery, not
+    23 individual deletes). Orphaned bindings go with them."""
+    import store as store_module
+
+    removed = store_module.delete_phrase_regions(photo_id, phrase)
+    if not removed:
+        raise HTTPException(status_code=404, detail="unknown phrase")
+    dropped = [o for o in removed if delete_binding(photo_id, o)]
+    return {"ok": True, "phrase": phrase, "removed": removed,
+            "dropped_bindings": dropped}
 
 
 @app.delete("/api/photos/{photo_id}/regions/{object_id}")

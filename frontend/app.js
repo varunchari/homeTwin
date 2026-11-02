@@ -196,13 +196,13 @@ function say(msg) { photoMsg.textContent = msg; }
 // The hero caps photo height, so wide viewports letterbox the image —
 // without this, every overlay drifts into the black bars. Inset #regions to
 // the image's rendered box on load, resize, and every regions render.
-function fitRegions() {
-  // The img ELEMENT stays full container width (width:100%) while
-  // object-fit:contain letterboxes the PICTURE inside it — so the element
-  // box lies. Recompute the displayed picture rect from the natural aspect.
-  if (!photoEl || photoEl.hidden || !photoEl.naturalWidth) return;
+// Displayed picture rect in viewport coords. The img ELEMENT stays full
+// container width while object-fit:contain letterboxes the PICTURE inside
+// it — so the element box lies. Overlays and taps must use this rect.
+function photoRect() {
   const wrap = photoEl.parentElement.getBoundingClientRect();
   const img = photoEl.getBoundingClientRect();
+  if (!photoEl.naturalWidth) return { left: img.left, top: img.top, width: img.width, height: img.height };
   const aspect = photoEl.naturalWidth / photoEl.naturalHeight;
   let w = img.width, h = img.width / aspect, x = 0, y = 0;
   if (h > img.height) {
@@ -212,10 +212,16 @@ function fitRegions() {
   } else {
     y = (img.height - h) / 2;
   }
-  regionsEl.style.left = `${img.left - wrap.left + x}px`;
-  regionsEl.style.top = `${img.top - wrap.top + y}px`;
-  regionsEl.style.width = `${w}px`;
-  regionsEl.style.height = `${h}px`;
+  return { left: img.left + x, top: img.top + y, width: w, height: h };
+}
+function fitRegions() {
+  if (!photoEl || photoEl.hidden || !photoEl.naturalWidth) return;
+  const wrap = photoEl.parentElement.getBoundingClientRect();
+  const r = photoRect();
+  regionsEl.style.left = `${r.left - wrap.left}px`;
+  regionsEl.style.top = `${r.top - wrap.top}px`;
+  regionsEl.style.width = `${r.width}px`;
+  regionsEl.style.height = `${r.height}px`;
   regionsEl.style.right = "auto";
   regionsEl.style.bottom = "auto";
 }
@@ -273,6 +279,7 @@ function renderRegions(regions) {
   lastRegions = regions;
   regionsEl.innerHTML = "";
   regionList.innerHTML = "";
+  const regionGroups = {};
   for (const r of regions) {
     const box = document.createElement("div");
     box.className = "region box" + (r.source === "manual" ? " manual" : "");
@@ -318,17 +325,41 @@ function renderRegions(regions) {
     pin.addEventListener("click", activate);
     box.addEventListener("click", activate);
     regionsEl.appendChild(pin);
-    const li = document.createElement("li");
-    li.className = r.source;
-    li.dataset.oid = r.object_id;
-    const label = document.createElement("span");
-    label.textContent = `${r.object_id} · ${r.phrase}`;
-    li.appendChild(label);
-    const badge = document.createElement("span");
-    badge.className = "state-badge";
-    li.appendChild(badge);
-    li.title = `source: ${r.source}`;
-    regionList.appendChild(li);
+    (regionGroups[r.phrase] ||= []).push(r);
+  }
+  // Grouped by phrase with one ✕ per group: oops recovery is one click,
+  // not one delete per stray region.
+  for (const [phrase, items] of Object.entries(regionGroups)) {
+    const head = document.createElement("li");
+    head.className = "phrase-head";
+    const hlabel = document.createElement("span");
+    hlabel.textContent = `${phrase} (${items.length})`;
+    head.appendChild(hlabel);
+    const del = document.createElement("button");
+    del.className = "mini guest-hide";
+    del.textContent = "✕";
+    del.title = `Remove all ${items.length} "${phrase}" region(s)`;
+    del.addEventListener("click", async () => {
+      const res = await fetch(`/api/photos/${photoId}/phrases/${encodeURIComponent(phrase)}`, { method: "DELETE" });
+      const body = await res.json();
+      say(res.ok ? `Removed ${body.removed.length} "${phrase}" region(s).` : `Remove failed: ${body.detail || res.status}`);
+      await refreshGraph();
+    });
+    head.appendChild(del);
+    regionList.appendChild(head);
+    for (const r of items) {
+      const li = document.createElement("li");
+      li.className = r.source;
+      li.dataset.oid = r.object_id;
+      const label = document.createElement("span");
+      label.textContent = `${r.object_id} · ${r.phrase}`;
+      li.appendChild(label);
+      const badge = document.createElement("span");
+      badge.className = "state-badge";
+      li.appendChild(badge);
+      li.title = `source: ${r.source}`;
+      regionList.appendChild(li);
+    }
   }
   if (selectedId) showSelected(selectedId);
   updatePins();
@@ -1181,12 +1212,14 @@ segmentBtn.addEventListener("click", async () => {
   }
   const matched = body.matched_phrase && body.matched_phrase !== phrase
     ? ` (matched as "${body.matched_phrase}")` : "";
-  say(`"${phrase}"${matched}: ${body.regions.length} region(s) in ${body.latency_ms} ms.`);
+  const supp = body.suppressed
+    ? ` (${body.suppressed} overlapping/tiny candidate(s) skipped)` : "";
+  say(`"${phrase}"${matched}: ${body.regions.length} region(s) in ${body.latency_ms} ms${supp}.`);
   await refreshGraph();
 });
 
 function photoCoords(ev) {
-  const rect = photoEl.getBoundingClientRect();
+  const rect = photoRect();
   return {
     x: Math.min(Math.max((ev.clientX - rect.left) / rect.width, 0), 1),
     y: Math.min(Math.max((ev.clientY - rect.top) / rect.height, 0), 1),

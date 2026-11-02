@@ -311,6 +311,8 @@ body.guest .guest-hide { display: none !important; }
 #live-devices, #live-automations { max-height: 35vh; overflow-y: auto; }
 #live-devices li, #live-automations li { justify-content: flex-start; }
 #live-devices .board-name { flex: 1; }
+#region-list .phrase-head { display: flex; justify-content: space-between; align-items: center; font-weight: 700; }
+.mini { font: inherit; font-size: 0.75rem; padding: 0.1rem 0.45rem; border-radius: 6px; border: 1px solid #3a4653; background: var(--panel-2); color: var(--text); cursor: pointer; }
 .pill { font-size: 0.7rem; font-weight: 700; padding: 0.1rem 0.5rem; border-radius: 999px; background: #2a343e; color: var(--muted); }
 .pill.on { background: #1d3a24; color: var(--accent); }
 @media (max-width: 60rem) {

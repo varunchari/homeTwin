@@ -276,6 +276,81 @@ class DemoPhotoEndpointTest(unittest.TestCase):
         self.assertEqual(second["photo_id"], first["photo_id"])
 
 
+SPRAY_BOXES = {
+    "captest": [(x, 100, x + 90, 190) for x in range(0, 800, 100)],
+    "seedphrase": [(0, 0, 100, 100)],
+    "otherphrase": [(0, 0, 100, 100)],
+    "gonephrase": [(0, 0, 100, 100), (200, 0, 300, 100)],
+}
+
+_spray_counter = [0]
+
+
+def _spray_upload(client):
+    import io
+    from PIL import Image
+
+    import app as proxy_module
+
+    _spray_counter[0] += 1
+    buf = io.BytesIO()
+    Image.new("RGB", (800, 300),
+              (_spray_counter[0] * 37 % 256, 10, 10)).save(buf, "JPEG")
+    saved = proxy_module.segment_image
+    proxy_module.segment_image = _no_sam
+    try:
+        return client.post(
+            "/api/photos", files={"file": ("r.jpg", buf.getvalue(), "image/jpeg")}
+        ).json()["photo_id"]
+    finally:
+        proxy_module.segment_image = saved
+
+
+class SegmentSprayGuardTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from starlette.testclient import TestClient
+
+        async def fake_segment(image_bytes, phrase):
+            return [{"object_id": None, "bbox": b, "mask_png": None}
+                    for b in SPRAY_BOXES.get(phrase, [])]
+
+        proxy.segment_image = fake_segment
+        cls.client = TestClient(proxy.app)
+
+    def test_caps_to_five_largest(self):
+        pid = _spray_upload(self.client)
+        body = self.client.post(f"/api/photos/{pid}/segment",
+                                json={"phrase": "captest"}).json()
+        self.assertEqual(len(body["regions"]), 5)
+        self.assertEqual(body["suppressed"], 3)
+
+    def test_suppresses_cross_phrase_duplicates(self):
+        pid = _spray_upload(self.client)
+        self.client.post(f"/api/photos/{pid}/segment", json={"phrase": "seedphrase"})
+        body = self.client.post(f"/api/photos/{pid}/segment",
+                                json={"phrase": "otherphrase"}).json()
+        self.assertEqual(body["regions"], [])
+        self.assertEqual(body["suppressed"], 1)
+
+    def test_phrase_delete_removes_group_and_bindings(self):
+        pid = _spray_upload(self.client)
+        body = self.client.post(f"/api/photos/{pid}/segment",
+                                json={"phrase": "gonephrase"}).json()
+        oid = body["regions"][0]["object_id"]
+        self.client.post(f"/api/photos/{pid}/bindings",
+                         json={"object_id": oid, "entity_id": "light.floor_lamp"})
+        gone = self.client.delete(
+            f"/api/photos/{pid}/phrases/gonephrase").json()
+        self.assertEqual(len(gone["removed"]), 2)
+        self.assertIn(oid, gone["dropped_bindings"])
+        graph = self.client.get(f"/api/photos/{pid}/graph").json()
+        self.assertEqual(graph["regions"], [])
+        self.assertEqual(graph["bindings"], {})
+        missing = self.client.delete(f"/api/photos/{pid}/phrases/nothinghere")
+        self.assertEqual(missing.status_code, 404)
+
+
 def tearDownModule():
     shutil.rmtree(TEST_DIR, ignore_errors=True)
 
