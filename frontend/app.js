@@ -20,6 +20,53 @@ const statusEl = document.getElementById("status");
 const listEl = document.getElementById("entities");
 const states = new Map();
 const stateAttrs = new Map(); // entity_id -> HA attributes (last_triggered, …)
+// Preview dock (left column, under the photo): mirrors any illustrative
+// preview image so it is compared with the live room at full width.
+// The panel preview and its Apply buttons stay authoritative; the dock
+// is a mirror only, never a second apply path.
+function showPreview(src, alt) {
+  const dock = document.getElementById("preview-dock");
+  const img = document.getElementById("preview-dock-img");
+  if (!dock || !img || !src) return;
+  img.src = src; img.alt = alt || "Illustrative preview"; img.hidden = false;
+  dock.hidden = false;
+}
+function hidePreview() {
+  const dock = document.getElementById("preview-dock");
+  if (dock) dock.hidden = true;
+}
+document.getElementById("preview-dock-hide")?.addEventListener("click", hidePreview);
+// Live board (left column, under the photo): devices + automations from
+// shownStates(), so in a Time Machine past view it shows the recorded
+// states, exactly like the pins and the Devices list — never live state
+// leaking into a frozen past view.
+function renderLiveBoard() {
+  const devEl = document.getElementById("live-devices");
+  const autoEl = document.getElementById("live-automations");
+  if (!devEl || !autoEl) return;
+  devEl.innerHTML = ""; autoEl.innerHTML = "";
+  for (const [id, st] of shownStates()) {
+    if (id.startsWith("automation.")) {
+      const li = document.createElement("li");
+      const dot = document.createElement("span");
+      dot.className = "dot" + (st === "on" ? " on" : "");
+      const name = document.createElement("span");
+      const last = (stateAttrs.get(id) || {}).last_triggered;
+      name.textContent = prettyEntity(id) + (st === "on" ? " (on)" : " (off)") +
+        (last ? ` — last fired ${fmtFired ? fmtFired(last) : last}` : " — never fired");
+      li.appendChild(dot); li.appendChild(name); autoEl.appendChild(li);
+      continue;
+    }
+    if (id.startsWith("input_boolean.") && !["input_boolean.tv_on", "input_boolean.display_on"].includes(id)) continue;
+    if (id === "sun.sun") continue;
+    const li = document.createElement("li");
+    const dot = document.createElement("span");
+    dot.className = "dot" + (st === "on" ? " on" : "");
+    const name = document.createElement("span");
+    name.textContent = `${prettyEntity(id)} — ${st}`;
+    li.appendChild(dot); li.appendChild(name); devEl.appendChild(li);
+  }
+}
 
 function render() {
   listEl.innerHTML = "";
@@ -62,6 +109,7 @@ function render() {
   if (typeof updatePins === "function") updatePins();
   if (typeof syncEntitySelect === "function") syncEntitySelect();
   if (typeof updateSteps === "function") updateSteps();
+  renderLiveBoard();
 }
 
 async function load() {
@@ -677,6 +725,7 @@ document.getElementById("move-btn").addEventListener("click", async () => {
       return;
     }
     prevBtn.textContent = "Preview move";
+    showPreview(b2.preview_url, "Illustrative move preview");
     const img = document.createElement("img");
     img.src = b2.preview_url;
     img.alt = "Illustrative move preview";
@@ -881,6 +930,7 @@ document.getElementById("reset-btn").addEventListener("click", async () => {
   if (typeof advisorView !== "undefined" && advisorView) advisorView.innerHTML = "";
   if (typeof todView !== "undefined" && todView) todView.innerHTML = "";
   if (typeof advisorPreviewWrap !== "undefined" && advisorPreviewWrap) advisorPreviewWrap.hidden = true;
+  hidePreview();
   if (typeof voiceTranscript !== "undefined" && voiceTranscript) voiceTranscript.hidden = true;
   if (typeof voiceAction !== "undefined" && voiceAction) voiceAction.innerHTML = "";
   autoText.value = "";
@@ -1098,6 +1148,7 @@ document.getElementById("advisor-btn").addEventListener("click", async () => {
       if (!r2.ok) { say(`Preview failed: ${b2.detail || r2.status}`); return; }
       advisorPreview.src = b2.preview_url;
       advisorPreviewWrap.hidden = false;
+      showPreview(b2.preview_url, "Illustrative advisor preview");
       say(`Illustrative preview ready via ${b2.model}. Approving applies only the listed light actions.`);
     });
     div.appendChild(document.createElement("br"));
@@ -1111,6 +1162,7 @@ document.getElementById("advisor-btn").addEventListener("click", async () => {
   decline.addEventListener("click", () => {
     advisorView.innerHTML = "";
     advisorPreviewWrap.hidden = true;
+    hidePreview();
     say("Declined. Nothing changed in Home Assistant.");
   });
   advisorView.appendChild(decline);
@@ -1141,6 +1193,7 @@ document.getElementById("tod-btn").addEventListener("click", async () => {
   const img = document.createElement("img");
   img.src = body.preview_url;
   img.alt = `${body.label} illustrative preview`;
+  showPreview(body.preview_url, `${body.label} illustrative preview`);
   div.appendChild(img);
   div.appendChild(advisorApplyButton(body.setting, "Apply matching settings"));
   todView.appendChild(div);

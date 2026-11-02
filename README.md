@@ -68,6 +68,10 @@ The Automate panel offers a second model choice: "Open-weight via Baseten (label
 
 Live Baseten beats, both observed: proposal #30 (3,474 ms) and an independent reproduction, proposal #31 (3,109 ms), both via `meta-models/muse-spark-open-1026`, both approved and deployed, both firing door → light live via Home Assistant, with the provider and model labelled on screen (see `docs/evidence-log.md`). That evidence supports an open-weight bonus claim at submission; the claim itself is a submission-day decision, not made in this README.
 
+## Layout: sticky room, preview dock, live board
+
+The room photo column sticks to the top of the viewport while the right panel scrolls, so the room never scrolls out of view mid-demo (on narrow screens it un-sticks and flows as a single column). Illustrative previews are mirrored into a Preview dock under the photo at full left-column width, with a before/after comparison against the live room; the panel preview and its Apply buttons stay authoritative — the dock is a mirror only, never a second apply path. A Live board under the photo mirrors Devices and automations (including last-fired) from the same live state, so a change is visible next to the photo without scrolling to the bottom of the panel. In a Time Machine past view the board shows recorded states, never live state leaking into a frozen past view.
+
 ## Guest view (sliced, tap-only)
 
 `/?guest=1` opens a tap-only view: the demo room photo and bound pins, tap to turn lights/devices on/off, live state via WebSocket. Bind, Automate, Voice, What-If, Advisor, Rearrange, Scenes, and Reset are hidden, and requests carrying `X-HomeTwin-Guest: 1` are refused 403 by the backend before any HA write or model call. Sliced deliberately: no accounts, no expiry, no per-guest permissions — and not authentication, since the public demo has no accounts. A guest is someone who can use the room, not someone who can change the house.
