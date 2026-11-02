@@ -96,6 +96,7 @@ The following are planned, in future tense, and are not present-tense claims abo
 - P2: automation debugger, conflict detection, Time Machine, Scene Composer, energy advisor, accessibility advisor, foundational spatial memory.
 - P3: persistent multi-photo tracking, guest mode, Autopilot, multi-room mapping, Meta glasses / XR, advanced spatial memory, physical deployment path (Matter / Zigbee / Wi-Fi, swapping entity IDs, same API).
 - Stretch, not shipped: light-only active binding, Muse Gadgets Linux SDK (capped, read-only first), advanced What-If.
+- Onboarding tour (future, NOT a judge mode): the guided walkthrough concept — a step-by-step tour of photo, bind, tap, automate, What-If — is documented here only as a future new-user onboarding tour, to be built when user accounts and account management exist, so a tour can be per-account, resumable, and skippable. It is not shipped as a separate judge tour, and no judge-specific mode is claimed.
 
 ## Still open before submission
 

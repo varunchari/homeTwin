@@ -121,8 +121,8 @@
       </section>
       <section class="guest-hide">
         <h2>5 · What-If <span class="sim-tag">simulated</span></h2>
+        <p class="muted">Simulate one rule at a time, from its own card: pick the door and sun below, then Run What-If on that card.</p>
         <div id="whatif-row">
-          <select id="whatif-proposal" title="Automation proposal"></select>
           <select id="whatif-door" title="Simulated door event">
             <option value="on">door opens</option>
             <option value="off">door stays shut</option>
@@ -132,8 +132,7 @@
             <option value="night">simulated night</option>
           </select>
         </div>
-        <button id="whatif-btn" class="btn" disabled title="Generate a plan first">Preview</button>
-        <div id="whatif-view"></div>
+        <div id="automation-cards"></div>
       </section>
       <section class="guest-hide">
         <h2>6 · Design Advisor</h2>
@@ -175,14 +174,16 @@
       </section>
       <section class="guest-hide">
         <h2>9 · Time machine</h2>
-        <p class="muted">The room as it was: pins, Devices, and counts show recorded device states at the chosen time. The photo itself is unchanged — states are memory, pixels are not. Controls lock while viewing the past.</p>
+        <p class="muted">The room as it was: drag the timeline through recorded history, then View past. Pins, Devices, and counts show recorded device states at the chosen time. The photo itself is unchanged — states are memory, pixels are not. Controls lock while viewing the past. Play steps through recorded moments one snapshot at a time.</p>
         <div id="tm-row">
-          <input id="tm-date" type="date" title="Date to revisit" />
-          <select id="tm-hour" title="Hour to revisit"></select>
-          <span class="tm-colon">:</span>
-          <select id="tm-min" title="Minute to revisit"></select>
-          <button id="tm-view-btn" class="btn primary">View past</button>
+          <input id="tm-range" type="range" min="0" max="0" value="0" step="1" title="Drag through recorded history" />
+          <span id="tm-label">Loading timeline…</span>
+        </div>
+        <div id="tm-controls">
+          <button id="tm-play-btn" class="btn" disabled>Play</button>
+          <button id="tm-view-btn" class="btn primary" disabled>View past</button>
           <button id="tm-live-btn" class="btn" hidden>Back to live</button>
+          <button id="tm-refresh-btn" class="btn">Refresh timeline</button>
         </div>
         <div id="tm-view"></div>
       </section>
@@ -198,6 +199,7 @@
       </details>
     </aside>
   </main>
+  <button id="panel-toggle" class="btn">Hide panels</button>
 
   <!-- Day 3: binding, tap-to-control. Day 4: select-to-automate (dropdowns
        over draw-an-arrow: only bound regions, no ambiguous gesture parsing).

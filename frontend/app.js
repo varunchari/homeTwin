@@ -212,14 +212,15 @@ function shownStates() {
   // Non-recorded entities simply do not appear in a past view.
   return new Map(pastView);
 }
+let automationCount = 0; // rules shown as cards (What-If section)
 function updateSteps() {
   const rail = document.getElementById("steps");
-  if (!rail || typeof whatifProposal === "undefined") return;
+  if (!rail) return;
   const done = [
     photoId != null,
     Object.keys(bindings).length > 0,
     tapped,
-    whatifProposal.options.length > 0,
+    automationCount > 0,
     whatifDone,
   ];
   [...rail.children].forEach((li, i) => {
@@ -487,91 +488,104 @@ document.getElementById("plan-btn").addEventListener("click", async () => {
   await refreshProposals();
 });
 
-const whatifProposal = document.getElementById("whatif-proposal");
+const automationCards = document.getElementById("automation-cards");
 const whatifDoor = document.getElementById("whatif-door");
 const whatifSun = document.getElementById("whatif-sun");
-const whatifView = document.getElementById("whatif-view");
 async function refreshProposals() {
-  // Proposals belong to the current photo only. Before any photo is chosen
-  // the list stays empty — global history would look prepopulated.
-  const keep = whatifProposal.value;
-  whatifProposal.innerHTML = "";
-  if (!photoId) return;
+  // Automations as cards, not a selector list: each rule shows its
+  // trigger, condition, delay and last-fired, with What-If and Delete
+  // inline on the card. Proposals belong to the current photo only.
+  automationCards.innerHTML = "";
+  if (!photoId) { automationCount = 0; updateSteps(); return; }
   const res = await fetch(`/api/automations/proposals?photo_id=${photoId}`);
   const body = await res.json();
+  automationCount = body.proposals.length;
   for (const p of body.proposals) {
-    const opt = document.createElement("option");
-    opt.value = p.id;
-    // Name the bound devices, not the region ids: "Patio Door → Reading Light".
+    const card = document.createElement("div");
+    card.className = "auto-card";
     const sEnt = bindings[p.source_id];
     const tEnt = bindings[p.target_id];
-    let suffix = `[${p.status}]`;
-    if (p.status === "deployed") {
-      suffix += p.last_triggered ? `, last fired ${fmtFired(p.last_triggered)}` : ", never fired";
-    }
-    opt.textContent = `#${p.id} ${sEnt ? prettyEntity(sEnt) : prettyOid(p.source_id)} → ` +
-      `${tEnt ? prettyEntity(tEnt) : prettyOid(p.target_id)} ${suffix}`;
-    whatifProposal.appendChild(opt);
+    const ir = p.ir || {};
+    const cond = ir.condition && ir.condition.sun
+      ? `only ${ir.condition.sun === "after_sunset" ? "after sunset" : ir.condition.sun}`
+      : "any time";
+    const delay = ir.delay_s ? `off after ${ir.delay_s}s` : "no auto-off";
+    const fired = p.status === "deployed"
+      ? (p.last_triggered ? `last fired ${fmtFired(p.last_triggered)}` : "never fired")
+      : "not deployed yet";
+    const head = document.createElement("div");
+    head.className = "auto-card-head";
+    head.innerHTML = `<strong>#${p.id} ${sEnt ? prettyEntity(sEnt) : prettyOid(p.source_id)} → ` +
+      `${tEnt ? prettyEntity(tEnt) : prettyOid(p.target_id)}</strong> ` +
+      `<span class="state-badge ${p.status === "deployed" ? "on" : ""}">${p.status}</span>`;
+    card.appendChild(head);
+    const meta = document.createElement("div");
+    meta.className = "muted";
+    meta.textContent = `Trigger: door opens · ${cond} · ${delay} · ${fired}`;
+    card.appendChild(meta);
+    const result = document.createElement("div");
+    card.appendChild(result);
+    const row = document.createElement("div");
+    row.className = "auto-card-row";
+    const simBtn = document.createElement("button");
+    simBtn.className = "btn";
+    simBtn.textContent = "Run What-If";
+    simBtn.addEventListener("click", async () => {
+      const r = await fetch("/api/whatif", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ proposal_id: p.id, door: whatifDoor.value, sun: whatifSun.value }),
+      });
+      const b = await r.json();
+      result.innerHTML = "";
+      const div = document.createElement("div");
+      div.className = "plan" + (b.fires ? "" : " rejected");
+      const delayNote = r.ok && b.fires && b.delay_s ? ` Then off after ${b.delay_s}s.` : "";
+      div.textContent = r.ok
+        ? (b.fires ? `SIMULATED: fires — ${b.condition_note}.${delayNote}`
+                   : `SIMULATED: no fire — ${b.condition_note}.`)
+        : `What-If failed: ${b.detail || r.status}`;
+      if (r.ok) {
+        const step = (b.action && b.action[0]) || {};
+        const target = step.target ? prettyEntity(step.target.entity_id) : "the light";
+        const tl = document.createElement("ol");
+        tl.className = "timeline";
+        const at = (when, what) => {
+          const li = document.createElement("li");
+          const t = document.createElement("strong");
+          t.textContent = when;
+          li.appendChild(t);
+          li.appendChild(document.createTextNode(` — ${what}`));
+          tl.appendChild(li);
+        };
+        if (!b.trigger_match) at("never", "door stays shut, so the rule never triggers");
+        else if (!b.fires) { at("now", "door opens"); at("blocked", `${b.condition_note}; ${target} stays OFF`); }
+        else {
+          at("now", "door opens"); at("now", `${target} turns ON`);
+          if (b.delay_s) at(`+${b.delay_s}s`, `${target} turns OFF (auto-off)`);
+        }
+        div.appendChild(tl);
+        whatifDone = true;
+        updateSteps();
+      }
+      result.appendChild(div);
+    });
+    const delBtn = document.createElement("button");
+    delBtn.className = "btn";
+    delBtn.textContent = "Delete";
+    delBtn.addEventListener("click", async () => {
+      const r = await fetch(`/api/automations/${p.id}`, { method: "DELETE" });
+      const b = await r.json();
+      say(r.ok ? `Deleted rule #${p.id}.` : `Delete failed: ${b.detail || r.status}`);
+      await refreshProposals();
+      if (r.ok && p.status === "deployed") await load();
+    });
+    row.appendChild(simBtn); row.appendChild(delBtn);
+    card.appendChild(row);
+    automationCards.appendChild(card);
   }
-  if ([...whatifProposal.options].some((o) => o.value === keep)) whatifProposal.value = keep;
-  document.getElementById("whatif-btn").disabled = whatifProposal.options.length === 0;
   updateSteps();
 }
-document.getElementById("whatif-btn").addEventListener("click", async () => {
-  if (!photoId) { say("Upload a photo first."); return; }
-  if (!whatifProposal.value) { say("Generate a plan first."); return; }
-  const res = await fetch("/api/whatif", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      proposal_id: Number(whatifProposal.value),
-      door: whatifDoor.value,
-      sun: whatifSun.value,
-    }),
-  });
-  const body = await res.json();
-  whatifView.innerHTML = "";
-  const div = document.createElement("div");
-  div.className = "plan" + (body.fires ? "" : " rejected");
-  const delayNote = res.ok && body.fires && body.delay_s
-    ? ` Then off after ${body.delay_s}s.`
-    : "";
-  div.textContent = res.ok
-    ? (body.fires
-      ? `SIMULATED: fires — ${body.condition_note}.${delayNote}`
-      : `SIMULATED: no fire — ${body.condition_note}.`)
-    : `What-If failed: ${body.detail || res.status}`;
-  whatifView.appendChild(div);
-  // Timeline: the same verdict drawn over time, from the compiled rule —
-  // door event, light on, and auto-off when the rule carries a delay.
-  if (res.ok) {
-    const step = (body.action && body.action[0]) || {};
-    const target = step.target ? prettyEntity(step.target.entity_id) : "the light";
-    const tl = document.createElement("ol");
-    tl.className = "timeline";
-    const at = (when, what) => {
-      const li = document.createElement("li");
-      const t = document.createElement("strong");
-      t.textContent = when;
-      li.appendChild(t);
-      li.appendChild(document.createTextNode(` — ${what}`));
-      tl.appendChild(li);
-    };
-    if (!body.trigger_match) {
-      at("never", "door stays shut, so the rule never triggers");
-    } else if (!body.fires) {
-      at("now", "door opens");
-      at("blocked", `${body.condition_note}; ${target} stays OFF`);
-    } else {
-      at("now", "door opens");
-      at("now", `${target} turns ON`);
-      if (body.delay_s) at(`+${body.delay_s}s`, `${target} turns OFF (auto-off)`);
-    }
-    div.appendChild(tl);
-  }
-  if (res.ok) whatifDone = true;
-  updateSteps();
-});
 
 async function tapSelected() {
   if (!photoId || !selectedId) return;
@@ -851,10 +865,15 @@ document.getElementById("scene-save-btn").addEventListener("click", async () => 
 });
 refreshScenes();
 
-// Time machine: view recorded states, locks controls while active.
-const TM_LOCK_IDS = ["suggest-btn", "plan-btn", "whatif-btn", "voice-btn",
+// Time machine: a timeline scrubber over recorded snapshots, not
+// date/hour/minute selects — dragging is the picker, and the old
+// Minute=00 click miss disappears with the selects. Play steps through
+// recorded moments one snapshot at a time. Past-view rules are unchanged:
+// recorded states only, controls locked, Back to live restores.
+const TM_LOCK_IDS = ["suggest-btn", "plan-btn", "voice-btn",
   "advisor-btn", "tod-btn", "move-btn", "scene-save-btn", "bind-btn",
-  "unbind-btn", "segment-btn", "draw-btn", "reset-btn", "demo-btn", "tm-view-btn"];
+  "unbind-btn", "segment-btn", "draw-btn", "reset-btn", "demo-btn", "tm-view-btn",
+  "tm-play-btn", "tm-refresh-btn", "tm-range"];
 function lockControls(lock) {
   for (const id of TM_LOCK_IDS) {
     const el = document.getElementById(id);
@@ -862,50 +881,57 @@ function lockControls(lock) {
   }
   const photoInput = document.getElementById("photo-input");
   if (photoInput) photoInput.disabled = lock;
+  // Card buttons are dynamic, so lock them by container, not by id.
+  document.querySelectorAll("#automation-cards button").forEach((b) => { b.disabled = lock; });
   if (!lock) {
     document.getElementById("suggest-btn").disabled = !photoId;
     if (photoId) { refreshGraph(); refreshProposals(); }
   }
 }
-function resetTmInputs() {
-  // Date popup commits on click; hour/minute are plain selects, which always
-  // commit on click too — no segment-by-segment keyboard entry anywhere.
-  // valueAsDate is deliberately avoided: it stamps the UTC date, which reads
-  // as tomorrow on US evenings. Local components keep local today.
-  const date = document.getElementById("tm-date");
-  const hour = document.getElementById("tm-hour");
-  const min = document.getElementById("tm-min");
-  const fill = (sel, n) => {
-    if (!sel || sel.options.length) return;
-    for (let i = 0; i < n; i++) {
-      const o = document.createElement("option");
-      o.value = String(i).padStart(2, "0");
-      o.textContent = o.value;
-      sel.appendChild(o);
-    }
-  };
-  fill(hour, 24);
-  fill(min, 60);
-  const now = new Date();
-  if (date) {
-    date.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-` +
-      String(now.getDate()).padStart(2, "0");
-  }
-  if (hour) hour.value = String(now.getHours()).padStart(2, "0");
-  if (min) min.value = String(now.getMinutes()).padStart(2, "0");
-  // Value-matching can silently fail if an option's value format ever
-  // drifts from the padded form (Nov 2 test: Minute 00 would not land
-  // by click). Index is format-proof, so fall back to it.
-  if (hour && hour.value !== String(now.getHours()).padStart(2, "0")) hour.selectedIndex = now.getHours();
-  if (min && min.value !== String(now.getMinutes()).padStart(2, "0")) min.selectedIndex = now.getMinutes();
+let tmTimes = []; // distinct snapshot timestamps, oldest first
+let tmIndex = -1;
+let tmPlaying = false;
+let tmTimer = null;
+const tmRange = document.getElementById("tm-range");
+const tmLabel = document.getElementById("tm-label");
+const tmPlayBtn = document.getElementById("tm-play-btn");
+function tmFmt(ts) { return fmtFired(new Date(ts * 1000).toISOString()); }
+function tmShowLabel() {
+  if (!tmTimes.length) { tmLabel.textContent = "No snapshots yet — memory starts when the recorder first runs"; return; }
+  tmLabel.textContent = tmFmt(tmTimes[tmIndex >= 0 ? tmIndex : tmTimes.length - 1]);
 }
-document.getElementById("tm-view-btn").addEventListener("click", async () => {
-  const date = document.getElementById("tm-date").value;
-  const hh = document.getElementById("tm-hour").value;
-  const mm = document.getElementById("tm-min").value;
-  if (!date) { say("Pick a date first."); return; }
-  const ts = Math.floor(new Date(`${date}T${hh}:${mm}`).getTime() / 1000);
-  if (Number.isNaN(ts)) { say("That date did not parse."); return; }
+
+async function refreshTimeline() {
+  stopPlayback();
+  try {
+    const res = await fetch("/api/snapshot-times");
+    const body = await res.json();
+    tmTimes = body.times || [];
+  } catch (e) { tmTimes = []; }
+  tmRange.max = Math.max(0, tmTimes.length - 1);
+  tmIndex = tmTimes.length ? tmTimes.length - 1 : -1;
+  tmRange.value = Math.max(0, tmIndex);
+  tmRange.disabled = !tmTimes.length;
+  tmPlayBtn.disabled = !tmTimes.length;
+  document.getElementById("tm-view-btn").disabled = !tmTimes.length;
+  tmShowLabel();
+}
+function stopPlayback() {
+  tmPlaying = false;
+  if (tmTimer) { clearInterval(tmTimer); tmTimer = null; }
+  if (tmPlayBtn) tmPlayBtn.textContent = "Play";
+}
+tmRange.addEventListener("input", () => {
+  tmIndex = Number(tmRange.value);
+  tmShowLabel();
+});
+tmRange.addEventListener("change", async () => {
+  // Dragging only re-enters the past view once released, so a scrub
+  // does not fire a state-at request per pixel.
+  if (timeTravel && tmTimes[tmIndex] != null) await enterPast(tmTimes[tmIndex]);
+});
+document.getElementById("tm-refresh-btn").addEventListener("click", refreshTimeline);
+async function enterPast(ts) {
   const res = await fetch(`/api/state-at?ts=${ts}`);
   const body = await res.json();
   const tmView = document.getElementById("tm-view");
@@ -922,7 +948,11 @@ document.getElementById("tm-view-btn").addEventListener("click", async () => {
   hidePreview();
   timeTravel = true;
   lockControls(true);
-  const when = fmtFired(new Date(body.ts * 1000).toISOString());
+  // Playback must keep working while locked: re-enable its own buttons.
+  tmPlayBtn.disabled = false;
+  document.getElementById("tm-live-btn").disabled = false;
+  tmRange.disabled = false;
+  const when = tmFmt(body.ts);
   const banner = document.getElementById("tm-banner");
   banner.textContent = `Viewing the past (${when}): pins, Devices, and counts show recorded states. The photo is unchanged — states are memory, pixels are not. `;
   const back = document.createElement("button");
@@ -938,8 +968,40 @@ document.getElementById("tm-view-btn").addEventListener("click", async () => {
   tmView.appendChild(div);
   render();
   say("Viewing the past — controls locked until you go back to live.");
+}
+document.getElementById("tm-view-btn").addEventListener("click", async () => {
+  if (!tmTimes.length) {
+    const tmView = document.getElementById("tm-view");
+    tmView.innerHTML = "";
+    const div = document.createElement("div");
+    div.className = "plan rejected";
+    div.textContent = "Time travel failed: no snapshots yet — memory starts when the recorder first runs";
+    tmView.appendChild(div);
+    return;
+  }
+  if (tmIndex < 0) tmIndex = tmTimes.length - 1;
+  await enterPast(tmTimes[tmIndex]);
+});
+tmPlayBtn.addEventListener("click", async () => {
+  if (tmPlaying) { stopPlayback(); return; }
+  if (!tmTimes.length) return;
+  if (!timeTravel) {
+    if (tmIndex < 0) tmIndex = 0;
+    await enterPast(tmTimes[tmIndex]);
+    if (!timeTravel) return;
+  }
+  tmPlaying = true;
+  tmPlayBtn.textContent = "Pause";
+  tmTimer = setInterval(async () => {
+    if (tmIndex >= tmTimes.length - 1) { stopPlayback(); say("Reached the latest snapshot."); return; }
+    tmIndex += 1;
+    tmRange.value = tmIndex;
+    tmShowLabel();
+    await enterPast(tmTimes[tmIndex]);
+  }, 1000);
 });
 async function exitPast() {
+  stopPlayback();
   timeTravel = false;
   pastView.clear();
   document.getElementById("tm-banner").hidden = true;
@@ -947,6 +1009,7 @@ async function exitPast() {
   document.getElementById("tm-live-btn").hidden = true;
   lockControls(false);
   await load();
+  await refreshTimeline();
   say("Back to live.");
 }
 document.getElementById("tm-live-btn").addEventListener("click", exitPast);
@@ -960,7 +1023,7 @@ document.getElementById("reset-btn").addEventListener("click", async () => {
   // A reset must LOOK like a reset: panels refresh from the server so no
   // stale automation, plan, or preview survives on screen.
   planView.innerHTML = "";
-  whatifView.innerHTML = "";
+  if (automationCards) automationCards.innerHTML = "";
   proposalList.innerHTML = "";
   moveView.innerHTML = "";
   await refreshScenes();
@@ -982,15 +1045,18 @@ document.getElementById("reset-btn").addEventListener("click", async () => {
   const todVariant = document.getElementById("tod-variant");
   if (todVariant) todVariant.value = "morning";
   // Nov 2 test residuals: Automate model/delay and the Time Machine
-  // error line survived Reset. A reset must restore every input,
-  // not just the ones that were already handled above.
+  // error line survived Reset. A reset must restore every input.
   const autoProvider = document.getElementById("auto-provider");
   if (autoProvider) autoProvider.value = "hosted";
   const autoDelay = document.getElementById("auto-delay");
   if (autoDelay) autoDelay.value = "";
   const tmViewReset = document.getElementById("tm-view");
   if (tmViewReset) tmViewReset.innerHTML = "";
-  resetTmInputs();
+  // Timeline resets to the latest snapshot (history itself survives
+  // Reset — snapshots are memory, not deployed rules).
+  stopPlayback();
+  document.getElementById("tm-view").innerHTML = "";
+  await refreshTimeline();
   tapped = false;
   whatifDone = false;
   updateSteps();
@@ -1415,8 +1481,16 @@ async function toWav16k(blob) {
   }
 }
 
-resetTmInputs();
+refreshTimeline();
 load().then(connect);
+// Narrow-screen bottom sheet toggle (wide screens: hidden by CSS).
+const panelToggle = document.getElementById("panel-toggle");
+if (panelToggle) {
+  panelToggle.addEventListener("click", () => {
+    const hidden = document.body.classList.toggle("sheet-hidden");
+    panelToggle.textContent = hidden ? "Show panels" : "Hide panels";
+  });
+}
 if (isGuest) {
   // Guests cannot upload or segment, so start them on the frozen demo room.
   const demoBtn = document.getElementById("demo-btn");

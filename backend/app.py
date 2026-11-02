@@ -295,6 +295,15 @@ async def history(entity_id: str | None = None, minutes: int = 60,
     return {"snapshots": store_module.snapshot_history(entity_id, since, limit)}
 
 
+@app.get("/api/snapshot-times")
+async def snapshot_times() -> dict:
+    """Distinct recorded moments for the Time Machine scrubber, oldest
+    first. Empty when the recorder has not run yet — the UI then shows
+    'no snapshots yet' instead of inventing a timeline."""
+    import store as store_module
+    return {"times": store_module.distinct_snapshot_times()}
+
+
 @app.get("/api/state-at")
 async def state_at(ts: float) -> dict:
     """The room as it was at a Unix timestamp: latest snapshot per entity.
@@ -1021,6 +1030,36 @@ async def approve_automation(proposal_id: int) -> dict:
     store_module.set_proposal_status(proposal_id, "deployed")
     return {"ok": True, "proposal_id": proposal_id,
             "automation_id": automation_id, "read_back": read.json()}
+
+
+@app.delete("/api/automations/{proposal_id}")
+async def delete_automation(proposal_id: int) -> dict:
+    """Delete one rule from its card. Deployed: delete the HA automation
+    (same existence-first dance as Reset, since HA answers 400 for a
+    missing id) and mark the proposal reset, then reload. Pending: just
+    delete the proposal row. Unknown id: 404, nothing deleted."""
+    import store as store_module
+    proposal = store_module.get_proposal(proposal_id)
+    if not proposal:
+        raise HTTPException(status_code=404, detail="unknown proposal")
+    if proposal["status"] == "deployed":
+        automation_id = f"hometwin_{proposal_id}"
+        async with httpx.AsyncClient(timeout=15) as client:
+            get = await client.get(
+                f"{HA_URL}/api/config/automation/config/{automation_id}",
+                headers=_headers())
+            if get.status_code == 200:
+                resp = await client.delete(
+                    f"{HA_URL}/api/config/automation/config/{automation_id}",
+                    headers=_headers())
+                if resp.status_code != 200:
+                    raise HTTPException(status_code=502, detail="HA delete failed")
+        await _ha_service("automation/reload", {})
+        store_module.set_proposal_status(proposal_id, "reset")
+        return {"ok": True, "proposal_id": proposal_id, "deleted": "deployed"}
+    if store_module.delete_proposal(proposal_id):
+        return {"ok": True, "proposal_id": proposal_id, "deleted": "pending"}
+    raise HTTPException(status_code=404, detail="unknown proposal")
 
 
 # --- Day 5: What-If preview (simulated inputs, clearly labelled) ---

@@ -20,12 +20,15 @@ class UILayoutTest(unittest.TestCase):
         self.css = (ROOT / "frontend" / "app.css").read_text()
         self.js = (ROOT / "frontend" / "app.js").read_text()
 
-    def test_sticky_room(self):
-        self.assertIn(".canvas-card { position: sticky;", self.css)
-        self.assertIn(".layout { align-items: start; }", self.css)
-        # Narrow single-column layout must un-stick, or the card would
-        # eat a phone screen.
-        self.assertRegex(self.css, r"@media \(max-width: 60rem\) \{[^}]*\.canvas-card \{ position: static;")
+    def test_photo_first_layout(self):
+        # Photo-first supersedes the sticky side column: hero on top,
+        # panel as a grid of cards below it, bottom sheet on narrow.
+        self.assertIn(".layout {\n  display: block;", self.css)
+        self.assertIn(".panel {\n  display: grid;", self.css)
+        self.assertNotIn(".canvas-card { position: sticky;", self.css)
+        self.assertIn('id="panel-toggle"', self.html)
+        narrow = self.css[self.css.find("@media (max-width: 60rem) {"):]
+        self.assertIn(".panel {\n    position: fixed;", narrow)
 
     def test_preview_dock_and_live_board_in_canvas_card(self):
         canvas_start = self.html.find('<section class="canvas-card">')
@@ -130,11 +133,42 @@ class UITestPassFixesTest(unittest.TestCase):
         self.assertIn('tm-view', reset)
         self.assertIn('innerHTML = "";', reset)
 
-    def test_tm_minute_falls_back_to_index(self):
-        tm = self.js[self.js.find("function resetTmInputs"):]
-        self.assertIn("min.selectedIndex = now.getMinutes();", tm)
-
     def test_stale_last_triggered_suppressed(self):
         self.assertIn("def _stale_last_triggered", self.py)
         self.assertIn("_stale_last_triggered(p.get(\"created\"), stamp)", self.py)
         self.assertIn("_stale_last_triggered(created_by_id[cfg_id]", self.py)
+class UIModernTest(unittest.TestCase):
+    """Photo-first modernizations: automation cards, Time Machine
+    scrubber, bottom sheet. The judge tour is documented only (see
+    README test below) — no judge mode is built."""
+
+    def setUp(self):
+        self.html = (ROOT / "frontend" / "index.html").read_text()
+        self.css = (ROOT / "frontend" / "app.css").read_text()
+        self.js = (ROOT / "frontend" / "app.js").read_text()
+        self.readme = (ROOT / "README.md").read_text()
+
+    def test_automation_cards_replace_selector(self):
+        self.assertIn('id="automation-cards"', self.html)
+        self.assertNotIn('id="whatif-proposal"', self.html)
+        self.assertNotIn('id="whatif-btn"', self.html)
+        self.assertIn("auto-card", self.js)
+        self.assertIn('"Run What-If"', self.js)
+        self.assertIn("/api/automations/${p.id}", self.js)
+        # Cards carry trigger, condition, delay and last-fired.
+        self.assertIn("last fired", self.js)
+
+    def test_time_machine_scrubber_replaces_selects(self):
+        self.assertIn('id="tm-range"', self.html)
+        self.assertIn('id="tm-play-btn"', self.html)
+        self.assertNotIn('id="tm-date"', self.html)
+        self.assertNotIn('id="tm-hour"', self.html)
+        self.assertNotIn('id="tm-min"', self.html)
+        self.assertIn("/api/snapshot-times", self.js)
+        self.assertIn("no snapshots yet", self.js)
+        self.assertIn("tmPlaying", self.js)
+
+    def test_tour_documented_as_future_onboarding_only(self):
+        self.assertIn("Onboarding tour (future, NOT a judge mode)", self.readme)
+        self.assertIn("when user accounts and account management exist", self.readme)
+        self.assertNotIn("judge tour", self.js.lower())

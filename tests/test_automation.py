@@ -524,6 +524,62 @@ class ProposeApproveTest(unittest.TestCase):
         self.assertGreaterEqual(len(all_props), len(only_a) + 1)
 
 
+class ModernUITest(unittest.TestCase):
+    """Snapshot-times for the scrubber, and card delete."""
+
+    @classmethod
+    def setUpClass(cls):
+        from starlette.testclient import TestClient
+        cls.client = TestClient(proxy.app)
+
+    def setUp(self):
+        self._saved_client = proxy.httpx.AsyncClient
+        self._saved_token = proxy.HA_TOKEN
+        self._saved_complete = spark_client.complete_json
+        proxy.httpx.AsyncClient = FakeAsyncClient
+        proxy.HA_TOKEN = "test-token-not-real"
+        spark_client.complete_json = fake_complete
+
+    def tearDown(self):
+        proxy.httpx.AsyncClient = self._saved_client
+        proxy.HA_TOKEN = self._saved_token
+        spark_client.complete_json = self._saved_complete
+
+    def test_snapshot_times_distinct_sorted(self):
+        import store as store_module
+        store_module.record_snapshot([(1000.0, "light.floor_lamp", "on"),
+                                      (1000.0, "light.string_lights", "off"),
+                                      (2000.0, "light.floor_lamp", "off")])
+        times = self.client.get("/api/snapshot-times").json()["times"]
+        self.assertIn(1000.0, times)
+        self.assertIn(2000.0, times)
+        self.assertEqual(times.count(1000.0), 1)
+        self.assertEqual(times, sorted(times))
+
+    def test_delete_pending_rule(self):
+        pid = make_bound_photo(self.client, w=522)
+        first = self.client.post("/api/automations/propose",
+                                 json={"photo_id": pid, "source_object_id": "door",
+                                       "target_object_id": "lamp", "text": ""}).json()
+        r = self.client.delete(f"/api/automations/{first['proposal_id']}")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["deleted"], "pending")
+        listed = self.client.get("/api/automations/proposals",
+                                 params={"photo_id": pid}).json()["proposals"]
+        self.assertEqual(listed, [])
+        self.assertEqual(self.client.delete("/api/automations/999999").status_code, 404)
+
+    def test_delete_deployed_rule(self):
+        pid = make_bound_photo(self.client, w=523)
+        first = self.client.post("/api/automations/propose",
+                                 json={"photo_id": pid, "source_object_id": "door",
+                                       "target_object_id": "lamp", "text": ""}).json()
+        self.client.post(f"/api/automations/{first['proposal_id']}/approve")
+        r = self.client.delete(f"/api/automations/{first['proposal_id']}")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["deleted"], "deployed")
+
+
 class WhatIfTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

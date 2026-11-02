@@ -440,6 +440,31 @@ def state_at(ts: float) -> dict[str, dict]:
         conn.close()
 
 
+def distinct_snapshot_times(limit: int = 5000) -> list[float]:
+    """Distinct snapshot timestamps, oldest first, for the Time Machine
+    scrubber. One row per poll, not per entity, so the slider steps
+    through recorded moments, not through duplicate timestamps."""
+    conn = connect()
+    try:
+        rows = conn.execute(
+            "SELECT DISTINCT ts FROM snapshots ORDER BY ts ASC LIMIT ?",
+            (max(1, min(limit, 5000)),)).fetchall()
+        return [r["ts"] for r in rows]
+    finally:
+        conn.close()
+
+
+def delete_proposal(proposal_id: int) -> bool:
+    """Delete one proposal row (card delete for a pending rule)."""
+    conn = connect()
+    try:
+        cur = conn.execute("DELETE FROM proposals WHERE id=?", (proposal_id,))
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
 def prune_snapshots(before_ts: float) -> int:
     """Delete snapshots older than a cutoff. Returns rows removed."""
     conn = connect()
