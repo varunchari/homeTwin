@@ -257,6 +257,84 @@ class AdvisorEndpointTest(unittest.TestCase):
         self.assertTrue(applied["ok"])
         self.assertIn("light/turn_on", SERVICE_CALLS)
 
+    def test_shrink_downscales_longest_edge(self):
+        from PIL import Image
+
+        from image_client import shrink_for_edit
+
+        buf = io.BytesIO()
+        Image.new("RGB", (1920, 1280), (5, 5, 5)).save(buf, "JPEG")
+        small = shrink_for_edit(buf.getvalue())
+        out = Image.open(io.BytesIO(small))
+        self.assertEqual(max(out.size), 1024)
+        self.assertLess(len(small), len(buf.getvalue()))
+        tiny = Image.new("RGB", (100, 80), (5, 5, 5))
+        tbuf = io.BytesIO()
+        tiny.save(tbuf, "JPEG")
+        self.assertEqual(shrink_for_edit(tbuf.getvalue()), tbuf.getvalue())
+
+    def _unique_photo(self):
+        from PIL import Image
+
+        buf = io.BytesIO()
+        Image.new("RGB", (500, 300), (9, 9, 9)).save(buf, "JPEG")
+        saved = proxy.segment_image
+        proxy.segment_image = _no_sam
+        try:
+            return self.client.post(
+                "/api/photos", files={"file": ("r.jpg", buf.getvalue(), "image/jpeg")}
+            ).json()["photo_id"]
+        finally:
+            proxy.segment_image = saved
+
+    def test_advisor_preview_cached_second_time(self):
+        calls = []
+        real_edit = image_client.edit_image
+
+        async def counting_edit(image_bytes, prompt):
+            calls.append(prompt)
+            return await real_edit(image_bytes, prompt)
+
+        image_client.edit_image = counting_edit
+        try:
+            pid = self._unique_photo()
+            setting = {"name": "CacheProbeUnique", "description": "probe",
+                       "actions": [{"entity_id": "light.reading_light",
+                                    "service": "light.turn_on"}]}
+            first = self.client.post("/api/advisor/preview",
+                                     json={"photo_id": pid, "setting": setting,
+                                           "request_text": "probe"}).json()
+            second = self.client.post("/api/advisor/preview",
+                                      json={"photo_id": pid, "setting": setting,
+                                            "request_text": "probe"}).json()
+        finally:
+            image_client.edit_image = real_edit
+        self.assertEqual(len(calls), 1)
+        self.assertFalse(first.get("cached", False))
+        self.assertTrue(second["cached"])
+        self.assertEqual(first["preview_url"], second["preview_url"])
+
+    def test_time_of_day_cached_second_time(self):
+        calls = []
+        real_edit = image_client.edit_image
+
+        async def counting_edit(image_bytes, prompt):
+            calls.append(prompt)
+            return await real_edit(image_bytes, prompt)
+
+        image_client.edit_image = counting_edit
+        try:
+            pid = self._unique_photo()
+            first = self.client.post("/api/advisor/time-of-day",
+                                     json={"photo_id": pid, "variant": "sunset"}).json()
+            second = self.client.post("/api/advisor/time-of-day",
+                                      json={"photo_id": pid, "variant": "sunset"}).json()
+        finally:
+            image_client.edit_image = real_edit
+        self.assertEqual(len(calls), 1)
+        self.assertTrue(second["cached"])
+        self.assertEqual(first["preview_url"], second["preview_url"])
+
     def test_suggest_rejects_bad_model_output(self):
         async def bad(system, user, schema, model="x", api_base=None, api_key=None):
             return {"settings": [setting("Bad", [("light.nope", "light.turn_on")])]}

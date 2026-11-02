@@ -85,6 +85,31 @@ async def generate_image(prompt: str) -> bytes:
         raise ImageError(f"Image generation returned unreadable JSON: {e}") from e
 
 
+EDIT_MAX_SIDE = 1024
+
+
+def shrink_for_edit(image_bytes: bytes, max_side: int = EDIT_MAX_SIDE) -> bytes:
+    """Downscale the longest edge before an edit. Lighting edits don't need
+    full resolution, and input pixels dominate the cost."""
+    from io import BytesIO
+
+    from PIL import Image
+
+    try:
+        img = Image.open(BytesIO(image_bytes))
+        if max(img.size) <= max_side:
+            return image_bytes
+        img = img.convert("RGB")
+        img.thumbnail((max_side, max_side), Image.LANCZOS)
+        buf = BytesIO()
+        img.save(buf, "JPEG", quality=80)
+        return buf.getvalue()
+    except ImageError:
+        raise
+    except Exception as e:
+        raise ImageError(f"unreadable input image: {e}") from e
+
+
 async def edit_image(image_bytes: bytes, prompt: str) -> bytes:
     """Image-to-image edit of the given room photo. Raises on failure."""
     import httpx
@@ -93,6 +118,7 @@ async def edit_image(image_bytes: bytes, prompt: str) -> bytes:
         raise ImageError("empty input image")
     if not prompt.strip():
         raise ImageError("empty image prompt")
+    image_bytes = shrink_for_edit(image_bytes)
     try:
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
