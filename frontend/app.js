@@ -20,6 +20,63 @@ const statusEl = document.getElementById("status");
 const listEl = document.getElementById("entities");
 const states = new Map();
 const stateAttrs = new Map(); // entity_id -> HA attributes (last_triggered, …)
+// Preview dock (left column, under the photo): mirrors any illustrative
+// preview image so it is compared with the live room at full width.
+// The panel preview and its Apply buttons stay authoritative; the dock
+// is a mirror only, never a second apply path.
+function showPreview(src, alt, label) {
+  const dock = document.getElementById("preview-dock");
+  const img = document.getElementById("preview-dock-img");
+  const lab = document.getElementById("preview-dock-label");
+  if (!dock || !img || !src) return;
+  img.src = src; img.alt = alt || "Illustrative preview"; img.hidden = false;
+  if (lab) lab.textContent = label ? `Preview — ${label}` : "";
+  dock.hidden = false; dock.open = true;
+}
+function hidePreview() {
+  const dock = document.getElementById("preview-dock");
+  if (dock) dock.hidden = true;
+}
+document.getElementById("preview-dock-hide")?.addEventListener("click", hidePreview);
+// Live board (left column, under the photo): devices + automations from
+// shownStates(), so in a Time Machine past view it shows the recorded
+// states, exactly like the pins and the Devices list — never live state
+// leaking into a frozen past view.
+function renderLiveBoard() {
+  const devEl = document.getElementById("live-devices");
+  const autoEl = document.getElementById("live-automations");
+  if (!devEl || !autoEl) return;
+  const title = document.getElementById("live-board-title");
+  if (title) title.textContent = timeTravel ? "Room as it was" : "Live in this room";
+  devEl.innerHTML = ""; autoEl.innerHTML = "";
+  for (const [id, st] of shownStates()) {
+    if (id.startsWith("automation.")) {
+      const li = document.createElement("li");
+      const dot = document.createElement("span");
+      dot.className = "dot" + (st === "on" ? " on" : "");
+      const name = document.createElement("span");
+      const last = (stateAttrs.get(id) || {}).last_triggered;
+      // In a past view the last-fired stamp would leak live data into the
+      // frozen view, so it is shown live-only — same rule as the Devices list.
+      const showLast = !timeTravel && last;
+      name.textContent = prettyEntity(id) + (st === "on" ? " (on)" : " (off)") +
+        (showLast ? ` — last fired ${fmtFired(last)}` : (timeTravel ? "" : " — never fired"));
+      li.appendChild(dot); li.appendChild(name); autoEl.appendChild(li);
+      continue;
+    }
+    // Whitelist: only real room devices. Sensors (e.g. sun_next_setting)
+    // and other domains are not devices and must not appear as rows.
+    const isBoardDevice = id.startsWith("light.") || id.startsWith("binary_sensor.") ||
+      ["input_boolean.tv_on", "input_boolean.display_on"].includes(id);
+    if (!isBoardDevice) continue;
+    const li = document.createElement("li");
+    const dot = document.createElement("span");
+    dot.className = "dot" + (st === "on" ? " on" : "");
+    const name = document.createElement("span");
+    name.textContent = `${prettyEntity(id)} — ${st}`;
+    li.appendChild(dot); li.appendChild(name); devEl.appendChild(li);
+  }
+}
 
 function render() {
   listEl.innerHTML = "";
@@ -35,11 +92,19 @@ function render() {
     li.appendChild(name);
     li.appendChild(dot);
     if (id.startsWith("automation.")) {
+      // Live-only stamp: snapshots carry states, not fire times, so a
+      // past view shows no stamp at all — not "never fired", not a live
+      // last_triggered leaking into the past.
       const fired = document.createElement("span");
       fired.className = "fired";
-      const lt = (stateAttrs.get(id) || {}).last_triggered;
-      fired.textContent = lt ? `last fired ${fmtFired(lt)}` : "never fired";
-      fired.title = lt ? `last_triggered: ${lt}` : "this rule has not fired yet";
+      const lt = timeTravel ? null : (stateAttrs.get(id) || {}).last_triggered;
+      if (timeTravel) {
+        // Snapshots carry states, not fire times: no stamp, no "never fired".
+        fired.hidden = true;
+      } else {
+        fired.textContent = lt ? `last fired ${fmtFired(lt)}` : "never fired";
+        fired.title = lt ? `last_triggered: ${lt}` : "this rule has not fired yet";
+      }
       li.appendChild(fired);
     }
     listEl.appendChild(li);
@@ -62,6 +127,7 @@ function render() {
   if (typeof updatePins === "function") updatePins();
   if (typeof syncEntitySelect === "function") syncEntitySelect();
   if (typeof updateSteps === "function") updateSteps();
+  renderLiveBoard();
 }
 
 async function load() {
@@ -139,9 +205,12 @@ let timeTravel = false;
 const pastView = new Map(); // entity_id -> past state while time-traveling
 function shownStates() {
   if (!timeTravel) return states;
-  const merged = new Map(states);
-  for (const [id, st] of pastView) merged.set(id, st);
-  return merged;
+  // Past-only, not merged with live: the recorder only records memorable
+  // devices (lights, door, TV/display, sun), so automations and sensors
+  // have no past state to show. Merging live states in would leak live
+  // automations/sensors into a view that promises recorded states only.
+  // Non-recorded entities simply do not appear in a past view.
+  return new Map(pastView);
 }
 function updateSteps() {
   const rail = document.getElementById("steps");
@@ -627,6 +696,7 @@ document.getElementById("suggest-btn").addEventListener("click", async () => {
 const moveView = document.getElementById("move-view");
 document.getElementById("move-btn").addEventListener("click", async () => {
   if (!photoId) { say("Upload a photo first."); return; }
+  hidePreview();
   const objectSelect = document.getElementById("move-object");
   const instruction = document.getElementById("move-text").value.trim();
   if (!objectSelect.value) { say("Bind a lamp first."); return; }
@@ -677,6 +747,7 @@ document.getElementById("move-btn").addEventListener("click", async () => {
       return;
     }
     prevBtn.textContent = "Preview move";
+    showPreview(b2.preview_url, "Illustrative move preview", `Move ${prettyOid(body.object_id)}`);
     const img = document.createElement("img");
     img.src = b2.preview_url;
     img.alt = "Illustrative move preview";
@@ -699,6 +770,7 @@ document.getElementById("move-btn").addEventListener("click", async () => {
       const b3 = await r3.json();
       if (r3.ok) {
         okBtn.disabled = true;
+        hidePreview();
         okBtn.textContent = `Moved ${prettyOid(b3.object_id)}`;
         say(`Pin moved. Tap it — same light, same binding.`);
         await refreshGraph();
@@ -739,6 +811,7 @@ async function refreshScenes() {
     apply.addEventListener("click", async () => {
       const r = await fetch(`/api/scenes/${encodeURIComponent(s.name)}/apply`, { method: "POST" });
       const b = await r.json();
+      if (r.ok) hidePreview();
       say(r.ok ? `Scene "${s.name}" applied (${b.applied.length} lights).`
                 : `Apply failed: ${b.detail || r.status}`);
     });
@@ -834,6 +907,7 @@ document.getElementById("tm-view-btn").addEventListener("click", async () => {
   }
   pastView.clear();
   for (const [id, s] of Object.entries(body.states)) pastView.set(id, s.state);
+  hidePreview();
   timeTravel = true;
   lockControls(true);
   const when = fmtFired(new Date(body.ts * 1000).toISOString());
@@ -881,6 +955,7 @@ document.getElementById("reset-btn").addEventListener("click", async () => {
   if (typeof advisorView !== "undefined" && advisorView) advisorView.innerHTML = "";
   if (typeof todView !== "undefined" && todView) todView.innerHTML = "";
   if (typeof advisorPreviewWrap !== "undefined" && advisorPreviewWrap) advisorPreviewWrap.hidden = true;
+  hidePreview();
   if (typeof voiceTranscript !== "undefined" && voiceTranscript) voiceTranscript.hidden = true;
   if (typeof voiceAction !== "undefined" && voiceAction) voiceAction.innerHTML = "";
   autoText.value = "";
@@ -926,6 +1001,7 @@ photoInput.addEventListener("change", async () => {
 });
 
 async function usePhoto(body) {
+  hidePreview();
   photoId = body.photo_id;
   tapped = false;
   whatifDone = false;
@@ -1042,6 +1118,7 @@ function advisorApplyButton(setting, label) {
     const body = await res.json();
     if (res.ok) {
       btn.textContent = `Applied: ${body.setting}`;
+      hidePreview();
       say(`Applied ${body.setting} in Home Assistant.`);
       await refreshGraph();
     } else {
@@ -1054,6 +1131,7 @@ function advisorApplyButton(setting, label) {
 }
 document.getElementById("advisor-btn").addEventListener("click", async () => {
   if (!photoId) { say("Upload a photo first."); return; }
+  hidePreview();
   say("Asking Spark for lighting settings…");
   advisorView.innerHTML = "";
   const res = await fetch("/api/advisor/suggest", {
@@ -1098,6 +1176,7 @@ document.getElementById("advisor-btn").addEventListener("click", async () => {
       if (!r2.ok) { say(`Preview failed: ${b2.detail || r2.status}`); return; }
       advisorPreview.src = b2.preview_url;
       advisorPreviewWrap.hidden = false;
+      showPreview(b2.preview_url, "Illustrative advisor preview", setting.name);
       say(`Illustrative preview ready via ${b2.model}. Approving applies only the listed light actions.`);
     });
     div.appendChild(document.createElement("br"));
@@ -1111,6 +1190,7 @@ document.getElementById("advisor-btn").addEventListener("click", async () => {
   decline.addEventListener("click", () => {
     advisorView.innerHTML = "";
     advisorPreviewWrap.hidden = true;
+    hidePreview();
     say("Declined. Nothing changed in Home Assistant.");
   });
   advisorView.appendChild(decline);
@@ -1141,6 +1221,7 @@ document.getElementById("tod-btn").addEventListener("click", async () => {
   const img = document.createElement("img");
   img.src = body.preview_url;
   img.alt = `${body.label} illustrative preview`;
+  showPreview(body.preview_url, `${body.label} illustrative preview`, body.label);
   div.appendChild(img);
   div.appendChild(advisorApplyButton(body.setting, "Apply matching settings"));
   todView.appendChild(div);
