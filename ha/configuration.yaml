@@ -4,7 +4,10 @@
 homeassistant:
   name: HomeTwin Demo
   unit_system: metric
-  time_zone: UTC
+  # Demo wall-clock: the sun condition anchors "today" to this zone, so it
+  # must match the demo location (Portland). UTC made "after sunset" false
+  # all evening PDT — the #32/#41 live-fire failures.
+  time_zone: America/Los_Angeles
   # Demo location drives sun times for the after-sunset condition.
   latitude: 45.5152
   longitude: -122.6784
