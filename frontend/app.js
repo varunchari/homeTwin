@@ -941,6 +941,9 @@ async function enterPast(ts) {
     div.className = "plan rejected";
     div.textContent = `Time travel failed: ${body.detail || res.status}`;
     tmView.appendChild(div);
+    // A failed step must not loop: stop playback instead of retrying
+    // the same missing moment every second.
+    stopPlayback();
     return;
   }
   pastView.clear();
