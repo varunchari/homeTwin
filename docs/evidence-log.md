@@ -72,6 +72,13 @@ Baseten A/B rows (Oct 30 only): record model string as shown in the Baseten dash
 - Image input downscaled to longest edge 1024 (`shrink_for_edit`) before every edit call; content-addressed cache (sha256 photo + prompt) serves repeat previews with `cached: true`.
 - Tests: 149 -> 152 (shrink unit + advisor-cache + tod-cache). Suite green.
 
+## 2026-11-02 — Open-weight sunset divergence (proposal #51, unresolved)
+- Daytime run, 11:53 AM PST: Baseten rule #51 ("only after sunset") FIRED on a door tap in daylight, while hosted rule #50 under the same conditions correctly stayed "never fired".
+- #51 was deleted and the closing Reset cleared proposals, so its compiled IR is no longer inspectable — the divergence is recorded here, not explained away.
+- The compiler is model-agnostic (it emits the sun condition whenever the IR condition is after_sunset, none when it is null), so the prime suspect is the open-weight IR dropping the sun condition while its prose still claimed sunset. The earlier UTC-timezone cause is ruled out as the whole story: HA is on America/Los_Angeles, and hosted and open-weight rules both fired correctly at night on Nov 1.
+- Status: unresolved. Do not record sunset as fully live-proven for the open-weight path until the capture run is done: re-propose the same Baseten pair in daytime, record the returned IR JSON and compiled HA payload verbatim before Approve, read back the HA condition before any tap, and do not delete or Reset until those records are saved.
+- The submission video's rules are any-time rules, so this cut claims no sunset beat on camera.
+
 ## 2026-11-03 — Voice, display polish, guest exit, video (submission eve)
 - Voice matcher now tolerates missing filler words ("reading light" == "the reading light"); suite 153. Spoken mic verified live over a localhost tunnel: "Turn on reading light" -> transcript -> tap-control button -> light on. A misheard take ("leading") was caught verbatim and retried clean.
 - Baseten plan titles get display-only smoothing for provider == open ("opens to on" stutter, repeats, missing "the"); raw IR unchanged in response, store, and spark_calls.jsonl. Suite 154. New `display_description` field; frontend prefers it.
