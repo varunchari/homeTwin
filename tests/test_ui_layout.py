@@ -212,6 +212,12 @@ class UIModernTest(unittest.TestCase):
         self.assertIn("no snapshots yet", self.js)
         self.assertIn("tmPlaying", self.js)
 
+    def test_ambient_clock_in_topbar(self):
+        ambient = self.html[self.html.find('class="ambient"'):self.html.find('topbar-right')]
+        self.assertIn('id="clock"', ambient)
+        self.assertIn("tickClock", self.js)
+        self.assertIn("setInterval(tickClock", self.js)
+
     def test_tour_documented_as_future_onboarding_only(self):
         self.assertIn("Onboarding tour (future, NOT a judge mode)", self.readme)
         self.assertIn("when user accounts and account management exist", self.readme)

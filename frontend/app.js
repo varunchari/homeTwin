@@ -1561,6 +1561,15 @@ async function toWav16k(blob) {
 
 refreshTimeline();
 load().then(connect);
+// Ambient clock: browser-local time next to the sun badge, so the
+// daytime/night narrative in the video always has a visible "now".
+function tickClock() {
+  const el = document.getElementById("clock");
+  if (!el) return;
+  el.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+tickClock();
+setInterval(tickClock, 20000);
 // Narrow-screen bottom sheet toggle (wide screens: hidden by CSS).
 const panelToggle = document.getElementById("panel-toggle");
 if (panelToggle) {
