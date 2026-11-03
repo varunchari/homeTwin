@@ -8,7 +8,7 @@ Built Oct 27–Nov 4, 2026 for the Meta Global AI Developer Hackathon (Cerebral 
 
 - Live demo (HTTP for now): http://3.135.147.231/ — an HTTPS domain is parked until a account upgrade allows domain registration; Caddy already terminates 80/443, so this is a domain + DNS change, not a re-architecture.
 - Honest scope: real Home Assistant engine, virtual devices for this demo. Physical rollout swaps entity IDs; the API, compiler and UI stay the same. Six fixtures: Floor lamp, String lights, Reading light, Patio door, TV and Smart display (as switches).
-- `docs/implementation-plan.md` is kept in the repo for now for collaboration and brainstorming. It will be deleted before the final submission — shipped behaviour is documented here and in `docs/evidence-log.md`.
+- Shipped behaviour is documented here and in `docs/evidence-log.md`; the collaboration plan draft was removed before submission (archived locally, outside the repo).
 
 ## What shipped (all live-verified)
 
