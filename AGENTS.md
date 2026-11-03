@@ -49,6 +49,7 @@ Known gotchas: Caddy only answers configured hosts (`SITE_ADDRESS` + `http://loc
 - Log every model call with model, latency, validation status (evidence log + `*_calls.jsonl`).
 - Keep `docs/evidence-log.md` current per beat; pins in `docs/versions.md`.
 - The collaboration plan draft was removed before submission (local archive in `prep_docs/`, plus git history); do not re-add planning docs to the repo.
+- [JUDGES.md](JUDGES.md) is the submission sheet (live link, video, beat map, honesty notes) — keep it accurate when behaviour changes.
 
 ## Troubleshooting
 

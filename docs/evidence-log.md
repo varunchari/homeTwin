@@ -71,3 +71,12 @@ Baseten A/B rows (Oct 30 only): record model string as shown in the Baseten dash
 - Advisor/move/time-of-day prompts now anchor to the detected setting: fixtures (lamp positions, TV, display, sofa, windows) must stay put; the edit changes only light mood/glow or the single named lamp move. Room-context fixtures appended to every prompt.
 - Image input downscaled to longest edge 1024 (`shrink_for_edit`) before every edit call; content-addressed cache (sha256 photo + prompt) serves repeat previews with `cached: true`.
 - Tests: 149 -> 152 (shrink unit + advisor-cache + tod-cache). Suite green.
+
+## 2026-11-03 — Voice, display polish, guest exit, video (submission eve)
+- Voice matcher now tolerates missing filler words ("reading light" == "the reading light"); suite 153. Spoken mic verified live over a localhost tunnel: "Turn on reading light" -> transcript -> tap-control button -> light on. A misheard take ("leading") was caught verbatim and retried clean.
+- Baseten plan titles get display-only smoothing for provider == open ("opens to on" stutter, repeats, missing "the"); raw IR unchanged in response, store, and spark_calls.jsonl. Suite 154. New `display_description` field; frontend prefers it.
+- Ambient clock (browser-local HH:MM) next to the Day/Night badge; safety rejection confirmed single-period live ("...no HA write."). Suite 154.
+- Guest-exit bug fixed: exiting `?guest=1` reloaded `/` and dropped the tab photo over live backend state (empty canvas + stale counts). Photo is now remembered per tab (sessionStorage), stashed/restored across guest entry/exit, restored on host boot after graph validation. Suite 159.
+- Preview cache verified live: identical advisor preview repeats return the same URL with `cached: true` in ~0.2 s; generated preview confirmed same-room (anchored prompts).
+- Video v2 recorded (2:56, within limit): Baseten rule hometwin_59 deployed via meta-models/muse-spark-open-1026, What-If night timeline for #58, voice retry, Reset ending ("2 automations deleted, 6 bindings cleared"). Master at prep_docs/hometwin_demo.mp4, repo copy at docs/hometwin_demo.mp4. Beat map in JUDGES.md.
+- Docs: README rewritten to shipped reality, AGENTS.md + SKILLS.md added, planning draft removed from repo (local archive + history retained).
