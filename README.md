@@ -4,6 +4,11 @@ A spatial programming and design studio: turn a room photograph into a controlla
 
 Built Oct 27–Nov 4, 2026 for the Meta Global AI Developer Hackathon (Cerebral Valley). Track: Indie (confirmed). All project code in this repo was written during the hackathon window.
 
+## Contributors
+
+- Varun Chari (sole human contributor — plan, review, live testing, video)
+- Muse Code, powered by Meta Muse Spark (agentic coding: implementation, tests, deploys)
+
 ## Demo
 
 - Live demo (HTTP for now): http://3.135.147.231/ — HTTPS is future product-worthy work (needs a registered domain; Caddy already terminates 80/443, so it is domain + DNS only, not a re-architecture). Secure-context needs were covered without it: mic testing ran over a local SSH port-forward to `http://localhost`, which browsers treat as a secure context.
