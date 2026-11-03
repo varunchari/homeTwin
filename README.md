@@ -6,112 +6,65 @@ Built Oct 27–Nov 4, 2026 for the Meta Global AI Developer Hackathon (Cerebral 
 
 ## Demo
 
-- Live demo (HTTP for now): http://3.135.147.231/ — an HTTPS domain will be added before submission; Caddy already terminates 80/443, so this is a domain + DNS change, not a re-architecture.
+- Live demo (HTTP for now): http://3.135.147.231/ — an HTTPS domain is parked until a account upgrade allows domain registration; Caddy already terminates 80/443, so this is a domain + DNS change, not a re-architecture.
 - Honest scope: real Home Assistant engine, virtual devices for this demo. Physical rollout swaps entity IDs; the API, compiler and UI stay the same. Six fixtures: Floor lamp, String lights, Reading light, Patio door, TV and Smart display (as switches).
 - `docs/implementation-plan.md` is kept in the repo for now for collaboration and brainstorming. It will be deleted before the final submission — shipped behaviour is documented here and in `docs/evidence-log.md`.
 
-## Layout
+## What shipped (all live-verified)
 
-- `backend/` — HA proxy: entity query, toggle, WebSocket `state_changed` fan-out. No HA credentials in the browser.
-- `frontend/` — static views. State comes only from HA WebSocket events. No optimistic UI.
-- `ha/` — Home Assistant Core config (Docker). Real engine, virtual devices for this demo.
-- `assets/demo-room/` — generated dummy room (rights-clean). See its README for fixtures and SAM prompts.
-- `docs/` — implementation plan (collaboration draft, removed before submission), evidence log, version records.
-- `scripts/` — day exit-test runners.
+**Photo → graph.** Upload or "Use demo room" (frozen Photo 7). SAM 3.1 text prompts segment lamps, string lights, TV, display; misses fall back to a retry with simpler tails plus phrase chips, and the patio door is a hand-drawn manual region. Duplicate box+mask hits are merged (IoU), region spray is guarded (phrase-level delete). Re-segmenting replaces regions instead of duplicating them; closing/reopening the tab retains the graph; re-uploads reuse cached regions without re-spending SAM.
 
-## Automation patterns (one compiler, three templates)
+**Bind.** Spark suggests all six bindings with reasons and confidences (Approve-all included); a manual region→entity picker remains the reliable baseline. Unbinding and "start fresh" are one click.
 
-1. State → action: door opens → light on.
-2. State + condition → action: door opens after sunset → light on.
-3. State → action + delay: door opens → light on, off after a delay. The Automate panel has an explicit delay dropdown (none / 1 minute for live testing / 5 minutes); a selected delay deterministically overrides anything the model inferred from text, so this beat does not depend on Spark parsing "off after a minute". **Status: auto-off after 60 s still unobserved live.** A sunset + 1-minute rule was deployed live on Oct 30 (proposal #32) and did not fire at night — the sunset condition, not the delay, is under investigation (see `docs/evidence-log.md`). Do not claim the delay beat as live until a no-sunset delay run is observed: door on → light on → after 60 s the light turns off by itself, via WebSocket state changes, with no manual tap to turn it off.
+**Tap.** Pins glow orange with ON badges; TV/display show screen glow on power-on. State comes only from HA WebSocket events — no optimistic UI. A topbar clock sits next to the Day/Night badge as the visible "now."
 
-Approval is required before every HA write. Only the patio door may trigger, only lights may be acted on, and only the sun condition is allowed — no locks, alarms, covers or arbitrary YAML, ever.
+**Automate.** Gesture (bound source/target) + text → Muse Spark AutomationIR → deterministic validator → deterministic compiler (three templates: state→action, +sunset condition, +auto-off delay) → approval → HA deploy with read-back. The delay dropdown (none / 1 min / 5 min) deterministically overrides model text. Safety first: a pre-model banned-intent gate rejects locks/alarms/covers with a plain reason, before any model call. Live-verified: 60-second auto-off fired on its own (#34); the sunset rule fired for real after the timezone root cause was fixed (UTC→America/Los_Angeles, #43).
 
-## Design Advisor and time of day
+**Open-weight path (Baseten, labelled).** The Automate model dropdown offers hosted Muse Spark or open-weight via Baseten — same prompt, schema, validator and compiler, only the provider differs (`BASETEN_API_KEY` + dashboard `BASETEN_MODEL`, host env only, 503 until set). The plan panel labels provider + model; `spark_calls.jsonl` logs both per call. Open-weight titles get display-only smoothing (raw IR stays verbatim in the response, store and logs). Live-verified: proposals #30/#31 and deployed rule #54 via `meta-models/muse-spark-open-1026`.
 
-Design Advisor: type a request (default "cozy evening") → Muse Spark proposes exactly 2 feasible lighting settings → pick one, preview it with Muse Image, then approve to apply it in Home Assistant. Declining changes nothing.
+**What-If.** Per-rule cards, simulated sun day/night, fires / no-fire with a door→on→off timeline. Simulated states never touch live lights.
 
-Time of day: pick Morning, Sunset, or Night → Muse Image edits the room photo into an illustrative variant → apply the matching preset lights, or don't.
+**Design Advisor + time-of-day.** Spark proposes exactly 2 feasible light-only settings; Muse Image edits the *room photo* (anchored prompts keep every fixture in place) into labelled-illustrative previews mirrored in a dock; Apply is approval-gated and only calls `light.turn_on/off`. Morning / Sunset / Night presets are deterministic. Inputs are downscaled to 1024px and repeat previews serve from a content-addressed cache (`cached: true`, ~zero latency) — verified live.
 
-Both are honest about their limits, and the UI says so on every preview:
+**Rearrange (lamp-move, honest).** Advisor proposes moving one bound lamp; the pin moves in the UI proposal, HA is untouched, Tap still works on the same light. Decline or Reset reverts.
 
-- Settings are only the home's real lights, on or off only — the template lights have no brightness or colour, so none is invented. Relocation stays a suggestion in prose, never an HA action.
-- Every preview is labelled illustrative: a mood preview, never a photometrically accurate simulation, and never a promise the room will look exactly like the picture.
-- Apply is a separate, approval-gated step, and it only ever calls supported `light.turn_on` / `light.turn_off` actions, validated against the live HA registry first.
-- Time-of-day presets are deterministic, not model output: Morning = all lights off, Sunset = string lights + reading light on, Night = reading light on only.
+**Scenes.** Save current light states under a name; one approval-gated Apply restores them.
 
-## Voice
+**State memory + Time Machine.** The backend snapshots device states every 60 s (7-day retention, read-only vs HA). Drag the timeline or press play to re-render recorded states; pre-recorder times honestly say "no snapshots yet." States are memory — pixels are not: the photo itself is never relit.
 
-Push-to-talk only: hold the Voice button, release to transcribe. The transcript is always shown on screen, and voice is never the only path — the typed Automate box still works. Voice is the preferred input, typing is always available alongside it: not everyone is comfortable speaking to a demo, and typed input makes testing and recording deterministic.
+**Voice.** Push-to-talk, transcript always shown, typing always available. Four utterances plus filler-word tolerance ("reading light" or "the reading light"); anything else gets "not supported yet" and never executes. Tap transcripts show an explicit control button; automation transcripts fill the Automate box for the normal review→Generate→approve path. No spoken replies, no stored audio. Live-verified with a real mic over a localhost tunnel (secure context), including a misheard take the transcript caught verbatim. HTTPS would remove the tunnel need.
 
-Spoken live verification is still open: the Voice panel and its 4-example hint are live, and the transcribe wire (WAV request/audio/encoding, transcript extraction) was proven against the real API, but a mic → transcript → tap / Automate fill run has not yet been observed in a browser with a microphone. It is not claimed as live-verified here.
+**Guest view.** `?guest=1` is tap-only: photo auto-loads, authoring panels hide, and guest-headered requests get 403 on any authoring endpoint (observed live). Exiting returns to the same room, not an empty canvas.
 
-- Automation transcripts fill the Automate box (and its source/target dropdowns, from the bound entities). The user still clicks Generate plan, then approves before any HA write — voice is a second input to the exact same Spark → validator → approval → deploy pipeline as typed input.
-- The tap-control transcript shows an explicit button to turn the reading light on. Clicking it is the action, the same live tap as tapping a pin.
-- Only 4 utterances are supported, and anything else gets "not supported yet" and is never executed:
-  1. "Turn the reading light on" (tap-control)
-  2. "When the door opens, turn the reading light on" (pattern 1)
-  3. "When the door opens after sunset, turn the string lights on" (pattern 2)
-  4. "When the door opens, turn the reading light on, off after a minute" (pattern 3)
-- No spoken replies: Voice Transcribe is speech-to-text only. Audio is sent once for transcription and is not stored; only the transcript text is logged for evidence.
-- Integration freeze from here: no new models, SDKs, or services after voice, except the already-planned stretch items if time remains.
-
-## Why dropdowns, not draw-an-arrow, for automation
-
-You are right: dropdowns are the better UX here, and more controlled. Automate uses two dropdowns (trigger region → action region) limited to bound regions only, plus an instruction box and the delay/model dropdowns above. A drawn arrow would have to be parsed into source, target and intent — ambiguous at the edges, fragile under a slightly off drag, and hard to validate before the model runs. Dropdowns make the choice explicit, auditable and re-runnable, which is what a demo and a judge need.
-
-Drawing is kept only where it earns its place: as the manual fallback for creating a region when SAM misses (e.g. the patio door), not for authoring automations.
-
-## Open-weight path (Baseten, labelled)
-
-The Automate panel offers a second model choice: "Open-weight via Baseten (labelled)". It runs the same prompt, JSON schema, deterministic validator and compiler as the hosted Muse Spark path — only the provider changes (Baseten OpenAI-compatible endpoint, `BASETEN_API_KEY` + `BASETEN_MODEL` server-side only, see `.env.example`). The plan panel labels the provider and model on screen, and `spark_calls.jsonl` logs provider + model per call.
-
-Live Baseten beats, both observed: proposal #30 (3,474 ms) and an independent reproduction, proposal #31 (3,109 ms), both via `meta-models/muse-spark-open-1026`, both approved and deployed, both firing door → light live via Home Assistant, with the provider and model labelled on screen (see `docs/evidence-log.md`). That evidence supports an open-weight bonus claim at submission; the claim itself is a submission-day decision, not made in this README.
-
-## Layout: sticky room, preview dock, live board
-
-The room photo column sticks to the top of the viewport while the right panel scrolls, so the room never scrolls out of view mid-demo (on narrow screens it un-sticks and flows as a single column). Illustrative previews are mirrored into a Preview dock under the photo at full left-column width, with a before/after comparison against the live room; the panel preview and its Apply buttons stay authoritative — the dock is a mirror only, never a second apply path. A Live board under the photo mirrors Devices and automations (including last-fired) from the same live state, so a change is visible next to the photo without scrolling to the bottom of the panel. In a Time Machine past view the board shows recorded states, never live state leaking into a frozen past view.
-
-## Guest view (sliced, tap-only)
-
-`/?guest=1` opens a tap-only view: the demo room photo and bound pins, tap to turn lights/devices on/off, live state via WebSocket. Bind, Automate, Voice, What-If, Advisor, Rearrange, Scenes, and Reset are hidden, and requests carrying `X-HomeTwin-Guest: 1` are refused 403 by the backend before any HA write or model call. Sliced deliberately: no accounts, no expiry, no per-guest permissions — and not authentication, since the public demo has no accounts. A guest is someone who can use the room, not someone who can change the house.
-
-## Reliability (public demo)
-
-- One shared demo, one HA engine. HA has no published port and no admin UI is exposed; the backend is its only client, and no HA or model credentials ever reach the browser.
-- Model-costly endpoints (upload, segment, suggest-bindings, propose, advisor suggest/preview/time-of-day, voice transcribe) are rate-limited per client address (30 per 10 minutes by default, `MODEL_RATE_LIMIT_PER_10MIN` / `MODEL_RATE_WINDOW_S` in `.env.example`). Tap, bind, What-If, approve and reset are not limited, so a limited visitor can still run the demo and retry the model step later. This is a demo guard, not authentication.
-- Live state comes only from HA WebSocket `state_changed` events, never optimistically. If the socket drops, the UI shows "Reconnecting…" and reconnects after 2 seconds.
-- The frozen demo photo is cached and labelled as such ("Photo 7 already known — loaded its regions directly"); a re-uploaded photo reuses its regions without re-spending SAM. A fresh photo on video is the one fresh SAM run.
-- Reset works from a fresh session: it turns everything off, deletes deployed `hometwin_*` rules, and clears bindings and history, leaving the demo usable again immediately.
-- Advisor and time-of-day live round trips (suggest → preview → apply, all three presets) are still to be verified live after a rebuild; they are described above as shipped code, not claimed as live-verified beats.
-
-## State memory (time-machine foundation, no UI yet)
-
-The backend snapshots demo device states (lights, patio door, TV/display switches, sun) every 60 seconds into SQLite, retained 7 days, readable via `GET /api/history`. Recording starts with the first browser connection after a deploy — earlier times honestly report "no snapshots yet." Read-only against HA: no writes, no models. This is the foundation for a future "room as it was" view — device states overlaid on the frozen photo, never a relit photo. The picker UI is not built yet (see Roadmap).
+**Reliability.** Rate limits on model-costly endpoints only (30/10 min); tap/bind/What-If/approve/reset unlimited. One-click Reset turns everything off, deletes deployed rules, clears bindings/panels/history. Conflict warnings name the overlapping deployed rule before a second one is approved.
 
 ## Roadmap (future only — not shipped)
 
-The following are planned, in future tense, and are not present-tense claims about this demo:
+Near term (small, high demo value): HTTPS domain; Onboarding tour (future, NOT a judge mode) — a per-account, resumable walkthrough to be built when user accounts and account management exist, never a judge-specific mode; automation debugger/dry-run trace beyond conflict warnings; advisor variants (accessibility, reading-light); mobile/narrow-screen polish; preview-disk cleanup job (files accumulate today); cost/latency dashboard from the existing `*_calls.jsonl` logs.
 
-- P2: automation debugger, conflict detection, Time Machine, Scene Composer, energy advisor, accessibility advisor, foundational spatial memory.
-- P3: persistent multi-photo tracking, guest mode, Autopilot, multi-room mapping, Meta glasses / XR, advanced spatial memory, physical deployment path (Matter / Zigbee / Wi-Fi, swapping entity IDs, same API).
-- Stretch, not shipped: light-only active binding, Muse Gadgets Linux SDK (capped, read-only first), advanced What-If.
-- Onboarding tour (future, NOT a judge mode): the guided walkthrough concept — a step-by-step tour of photo, bind, tap, automate, What-If — is documented here only as a future new-user onboarding tour, to be built when user accounts and account management exist, so a tour can be per-account, resumable, and skippable. It is not shipped as a separate judge tour, and no judge-specific mode is claimed.
+Long term (bigger bets): multi-room / multi-photo mapping; Matter/Zigbee/Wi-Fi physical rollout (same API, real entity IDs); energy advisor once real power data exists (never invented numbers); Autopilot-style suggestions; advanced spatial memory (multi-day patterns, anomaly notes); Meta glasses / XR overlay; Muse Gadgets SDK integration.
 
-## Still open before submission
+Non-goals: door locks or security devices in the demo allowlist; photometric "relit photo" claims; mock model calls passed off as real; any HA write without approval.
 
-- HTTPS domain for the demo (Caddy already terminates 80/443; this is a domain + DNS change).
-- Sunset-condition live fire (see the delay status above and `docs/evidence-log.md`).
-- Spoken voice live verification (see Voice above).
-- Delete `docs/implementation-plan.md` before final submission, as noted at the top.
+## How this product can be improved
 
-## Quick start (Lightsail host)
+- **Real lights, real attributes.** The demo templates are on/off only, so brightness, color and transitions are deliberately uninvented. Real bulbs unlock the Advisor's full vocabulary.
+- **Real telemetry.** Energy, occupancy and power readings would ground an energy advisor and a debugger that reasons about actual consumption.
+- **Latency.** Model calls take 2–10 s; the preview cache and deterministic delay dropdown already remove two waits. Streaming partial plans and smaller/faster models would remove more.
+- **Robustness.** SAM still misses thin or odd fixtures (manual fallback covers it); transcription mishears (verbatim transcript + closed set contain it). Confidence-gated auto-retry is the next step.
+- **Multi-user.** Accounts unlock per-user tours, saved rooms, and real auth to replace the tap-only guest slice.
+- **Ops.** SQLite backups, log rotation, and snapshot retention jobs before any always-on production use.
 
-1. Copy `.env.example` to `.env` and fill in secrets (never commit `.env`).
-2. `docker compose up -d --build`
-3. Run the Day 1 exit test: `hometwin/.venv/bin/python scripts/day1_exit_test.py`
+## Quick start
 
-HA has no published port. Caddy is the only thing on 80/443 and reverse-proxies the backend. HA version pin is recorded in `docs/versions.md`.
+From the repo root (`hometwin/`):
+
+1. Copy `.env.example` to `.env` and fill in secrets (never commit `.env`). Every key is server-side; the browser never sees one.
+2. `docker compose up -d --build` — services: `hometwin-ha` (no published ports), `hometwin-backend`, `hometwin-caddy` (80/443 only).
+3. `.venv/bin/python -m unittest discover -s tests` — full suite, must be green before any push or deploy.
+4. `docker restart hometwin-ha` after config changes; Reset in the UI for a clean demo baseline.
+
+HA version pin is recorded in `docs/versions.md`. Deployment notes for agents live in [AGENTS.md](AGENTS.md); the demo runbook lives in [SKILLS.md](SKILLS.md).
 
 ## Image attribution
 
