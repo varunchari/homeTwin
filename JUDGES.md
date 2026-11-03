@@ -12,18 +12,19 @@
 2. **Bind** — Spark proposes all six with reasons + confidences; Approve-all.
 3. **Tap** — pin glows, topbar counts; TV/display show screen glow without raising the light count.
 4. **Voice** — transcript on screen ("turn reading light on") → control button → light on.
-5. **Automate ×2** — hosted rule, then the **Baseten open-weight** rule (provider + `meta-models/muse-spark-open-1026` labelled, conflict warning names the first rule). Same prompt, schema, validator, compiler — only the provider differs.
-6. **Safety** — "unlock the front door" rejected, no plan, no HA write.
-7. **Live fire** — patio door ON at night → reading light turns on for real (last-fired stamp on the rule card).
-8. **Advisor + time-of-day** — "cozy evening" → 2 settings → dock preview labelled illustrative → Apply; Night preset applied.
-9. **Rearrange / Scenes / Time Machine / Guest** — pin moves (HA untouched), "movie night" saved + restored, timeline scrub re-renders past states, `?guest=1` tap-only view.
+5. **Automate ×2** — hosted rule #58 (door → floor lamp, off after 60 s), then the **Baseten open-weight** rule #59 (door → reading light, off after 120 s; provider + `meta-models/muse-spark-open-1026` labelled). Same prompt, schema, validator, compiler — only the provider differs. The two rules have different targets, so no conflict warning appears in this cut.
+6. **Live fire + auto-off** — door tap fires the hosted rule live (floor lamp on, last-fired stamp on the card), then the lamp turns itself off after 60 s on camera.
+7. **What-If** — #58's +60 s timeline and #59's detail, simulated before anything goes live.
+8. **Advisor + time-of-day** — "cozy evening" → 2 settings (Soft String Glow, Warm Reading Corner) → dock preview labelled illustrative → Apply; Sunset preset preview (string + reading on).
+9. **Rearrange / Scenes / Time Machine / Guest** — reading-lamp pin move proposed (HA untouched), "cozy morning" scene applied, Time Machine 8:55 AM past view locked then back to live, `?guest=1` tap-only view with automations visible, exit returns to the same room.
 10. **Reset** — everything off, rules deleted, panels cleared.
 
 ## Honest scope (please hold us to this)
 
 - Real Home Assistant engine, **virtual devices** for this demo. Physical rollout swaps entity IDs; API and compiler stay the same.
 - Previews are **illustrative mood edits**, never photometric promises. States are memory; pixels are not.
-- What-If day cards are **simulation**; the night fire is **real** (sun was down live).
+- What-If cards are **simulation**; the fires in this cut are **real** device state changes (any-time rules, fired live on camera). The sunset rule's live fire is logged separately in the evidence log (#43) and is not a beat in this cut.
+- The banned-intent safety gate (locks/alarms/covers rejected pre-model) is shipped code, not a beat in this cut — neither recording captured a refusal on camera, so none is claimed on video.
 - The Baseten plan title is display-smoothed; the stored IR and `spark_calls.jsonl` keep the model's verbatim text.
 - The demo image is AI-generated (rights-clean): `assets/demo-room/dummy-room.jpg`.
 
