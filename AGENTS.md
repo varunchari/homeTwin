@@ -48,7 +48,7 @@ Known gotchas: Caddy only answers configured hosts (`SITE_ADDRESS` + `http://loc
 - Commits: day-free messages, author `Muse Code <muse-code@local>`. Merge to `main`, push upstream.
 - Log every model call with model, latency, validation status (evidence log + `*_calls.jsonl`).
 - Keep `docs/evidence-log.md` current per beat; pins in `docs/versions.md`.
-- `docs/implementation-plan.md` is a collaboration draft slated for deletion before final submission.
+- The collaboration plan draft was removed before submission (local archive in `prep_docs/`, plus git history); do not re-add planning docs to the repo.
 
 ## Troubleshooting
 
