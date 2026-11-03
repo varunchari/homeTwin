@@ -1163,9 +1163,26 @@ photoInput.addEventListener("change", async () => {
   await usePhoto(await res.json());
 });
 
+async function restorePhoto() {
+  // Host boot only: return to the tab's room (guest exit or reload) so the
+  // canvas never sits empty over live backend state. Fresh visits have no
+  // stored photo and stay empty until one is chosen.
+  let pid = null;
+  try { pid = sessionStorage.getItem("hometwin_photo"); } catch (_) {}
+  if (!pid || photoId) return;
+  try {
+    const res = await fetch(`/api/photos/${encodeURIComponent(pid)}/graph`);
+    if (!res.ok) throw new Error("photo gone");
+    await usePhoto({ photo_id: Number(pid) });
+  } catch (_) {
+    try { sessionStorage.removeItem("hometwin_photo"); } catch (_) {}
+  }
+}
+
 async function usePhoto(body) {
   hidePreview();
   photoId = body.photo_id;
+  try { sessionStorage.setItem("hometwin_photo", String(body.photo_id)); } catch (_) {}
   tapped = false;
   whatifDone = false;
   document.getElementById("suggest-btn").disabled = false;
@@ -1579,7 +1596,25 @@ if (panelToggle) {
   });
 }
 if (isGuest) {
+  // Remember the host tab's room before the demo room replaces it, and put
+  // it back on every exit link — exiting must return to the same room,
+  // not an empty canvas over live backend state.
+  try {
+    const prev = sessionStorage.getItem("hometwin_photo");
+    if (prev) sessionStorage.setItem("hometwin_return_photo", prev);
+  } catch (_) {}
+  document.querySelectorAll('a[href="/"]').forEach((a) => {
+    a.addEventListener("click", () => {
+      try {
+        const ret = sessionStorage.getItem("hometwin_return_photo");
+        if (ret) sessionStorage.setItem("hometwin_photo", ret);
+        sessionStorage.removeItem("hometwin_return_photo");
+      } catch (_) {}
+    });
+  });
   // Guests cannot upload or segment, so start them on the frozen demo room.
   const demoBtn = document.getElementById("demo-btn");
   if (demoBtn) demoBtn.click();
+} else {
+  restorePhoto();
 }

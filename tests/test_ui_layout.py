@@ -102,6 +102,14 @@ class UIPolishTest(unittest.TestCase):
         self.assertIn("function photoRect()", self.js)
         self.assertIn("const rect = photoRect();", self.js)
 
+    def test_guest_exit_returns_to_same_room(self):
+        # usePhoto remembers the tab's room; host boot restores it so an
+        # exit never lands on an empty canvas over live backend state.
+        self.assertIn('sessionStorage.setItem("hometwin_photo"', self.js)
+        self.assertIn("hometwin_return_photo", self.js)
+        self.assertIn("restorePhoto();", self.js)
+        self.assertIn("function restorePhoto()", self.js)
+
 
 if __name__ == "__main__":
     unittest.main()
