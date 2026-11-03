@@ -1,6 +1,6 @@
 # HomeTwin — judges' sheet
 
-**Live demo:** http://3.135.147.231/ (HTTP; HTTPS is a parked domain+DNS change — Caddy already terminates 80/443)
+**Live demo:** http://3.135.147.231/ (HTTP; HTTPS is future product-worthy work — needs a registered domain, Caddy already terminates 80/443. The mic beat was executed securely over a local SSH port-forward to `http://localhost`, which browsers treat as a secure context.)
 **Video:** [docs/hometwin_demo.mp4](docs/hometwin_demo.mp4) — local master at `prep_docs/hometwin_demo.mp4`; public URL to be added at submission.
 **Track:** Indie. **Built:** Oct 27–Nov 4, 2026, all code in this repo. **License:** see [LICENSE](LICENSE).
 

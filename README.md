@@ -6,7 +6,7 @@ Built Oct 27–Nov 4, 2026 for the Meta Global AI Developer Hackathon (Cerebral 
 
 ## Demo
 
-- Live demo (HTTP for now): http://3.135.147.231/ — an HTTPS domain is parked until an account upgrade allows domain registration; Caddy already terminates 80/443, so this is a domain + DNS change, not a re-architecture.
+- Live demo (HTTP for now): http://3.135.147.231/ — HTTPS is future product-worthy work (needs a registered domain; Caddy already terminates 80/443, so it is domain + DNS only, not a re-architecture). Secure-context needs were covered without it: mic testing ran over a local SSH port-forward to `http://localhost`, which browsers treat as a secure context.
 - Video (2:56): [docs/hometwin_demo.mp4](docs/hometwin_demo.mp4) — beat map and honesty notes for judges live in [JUDGES.md](JUDGES.md).
 - Honest scope: real Home Assistant engine, virtual devices for this demo. Physical rollout swaps entity IDs; the API, compiler and UI stay the same. Six fixtures: Floor lamp, String lights, Reading light, Patio door, TV and Smart display (as switches).
 - Shipped behaviour is documented here and in `docs/evidence-log.md`; the collaboration plan draft was removed before submission (archived locally, outside the repo).
