@@ -4,7 +4,7 @@
 **Video:** [docs/hometwin_demo.mp4](docs/hometwin_demo.mp4) — local master at `prep_docs/hometwin_demo.mp4`; public URL to be added at submission.
 **Track:** Indie. **Built:** Oct 27–Nov 4, 2026, all code in this repo. **License:** see [LICENSE](LICENSE).
 
-> ⏱️ **Runtime note:** the current cut is 3:37 and must be trimmed to ≤3:00 before submission. Suggested cuts: the first misheard voice take (~20 s, keep the retry), and 10–15 s from the rearrange/time-machine beats. The ending must land on settled 0-lights/0-automations counts, not the mid-Reset frame.
+> ⏱️ **Runtime:** 2:56 — within the 3:00 limit. Ends on the Reset confirmation ("everything off, 2 automations deleted, 6 bindings cleared").
 
 ## Watch for (in order)
 
