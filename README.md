@@ -46,11 +46,11 @@ Built Oct 27–Nov 4, 2026 for the Meta Global AI Developer Hackathon (Cerebral 
 
 ## Roadmap (future only — not shipped)
 
-Near term (small, high demo value): HTTPS domain; Onboarding tour (future, NOT a judge mode) — a per-account, resumable walkthrough to be built when user accounts and account management exist, never a judge-specific mode; automation debugger/dry-run trace beyond conflict warnings; advisor variants (accessibility, reading-light); mobile/narrow-screen polish; preview-disk cleanup job (files accumulate today); cost/latency dashboard from the existing `*_calls.jsonl` logs.
+Near term (small, high demo value): HTTPS domain; Onboarding tour (future, NOT a judge mode) — a per-account, resumable walkthrough to be built when user accounts and account management exist, never a judge-specific mode; "why didn't my light turn on" debugger — read-only trace over rules, states, history and sun, with fixes proposed through the normal approval path; advisor variants (accessibility, reading-light); mobile/narrow-screen polish; preview-disk cleanup job (files accumulate today); cost/latency dashboard from the existing `*_calls.jsonl` logs.
 
-Long term (bigger bets): multi-room / multi-photo mapping; Matter/Zigbee/Wi-Fi physical rollout (same API, real entity IDs); energy advisor once real power data exists (never invented numbers); Autopilot-style suggestions; advanced spatial memory (multi-day patterns, anomaly notes); Meta glasses / XR overlay; Muse Gadgets SDK integration.
+Long term (bigger bets): multi-room / multi-photo mapping; Matter/Zigbee/Wi-Fi physical rollout (same API, real entity IDs); energy advisor once real power data exists (never invented numbers); Autopilot-style suggestions; advanced spatial memory (multi-day patterns, anomaly notes); Meta glasses / XR overlay; Muse Gadgets SDK integration; agentic routines — multi-step tool calls (existing endpoints as typed tools) with per-step human approval, proactive memory notes that propose but never act, a new-photo setup agent, and trajectory logging (goal → tool calls → approvals → outcome) as provenance for any future agentic claim.
 
-Non-goals: door locks or security devices in the demo allowlist; photometric "relit photo" claims; mock model calls passed off as real; any HA write without approval.
+Non-goals: door locks or security devices in the demo allowlist; photometric "relit photo" claims; mock model calls passed off as real; any HA write without approval — including autonomous agent writes.
 
 ## How this product can be improved
 
