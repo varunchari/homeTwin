@@ -8,6 +8,8 @@ ever executed; the compiler emits only the three P0 templates.
 
 from __future__ import annotations
 
+import re
+
 IR_SCHEMA = {
     "type": "object",
     "properties": {
@@ -119,6 +121,32 @@ def apply_delay_override(ir: dict, delay_s: int | None) -> dict:
     out = dict(ir)
     out["delay_s"] = delay_s
     return out
+
+
+def smooth_plan_description(description: str, provider: str = "hosted") -> str:
+    """Display-only cleanup for awkward open-weight plan prose.
+
+    The stored IR, validator, compiler, HA write, and spark_calls.jsonl
+    entry always keep the model's verbatim description. Only the shown
+    title for provider == "open" is lightly normalized: collapsed
+    whitespace, removed "opens to on" stutter, collapsed repeated words,
+    a comma after the door clause, and "the" before demo device nouns.
+    Hosted output is returned untouched.
+    """
+    if provider != "open" or not isinstance(description, str):
+        return description
+    text = " ".join(description.split())
+    text = re.sub(r"\bopens\s+to\s+on\b", "opens", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b(\w+)(\s+\1)+\b", r"\1", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bopens\s+(turns?)\b", r"opens, \1", text, flags=re.IGNORECASE)
+    text = re.sub(
+        r"\b(turn|turns)\s+on\s+(reading light|floor lamp|string lights)\b",
+        r"\1 on the \2",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(r"\s+,", ",", text)
+    return " ".join(text.split())
 
 
 def norm_condition(ir: dict) -> dict | None:

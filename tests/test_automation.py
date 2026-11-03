@@ -15,7 +15,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
 import app as proxy  # noqa: E402
 import spark_client  # noqa: E402
-from automation import apply_delay_override, compile_ir, validate_ir  # noqa: E402
+from automation import (apply_delay_override, compile_ir,  # noqa: E402
+                        smooth_plan_description, validate_ir)
 
 REGISTRY = {"binary_sensor.patio_door", "light.floor_lamp",
             "light.string_lights", "light.reading_light"}
@@ -97,6 +98,23 @@ class DelayOverrideTest(unittest.TestCase):
             apply_delay_override(valid_ir(), 3601)
         with self.assertRaises(ValueError):
             apply_delay_override(valid_ir(), -1)
+
+
+class SmoothDescriptionTest(unittest.TestCase):
+    def test_open_provider_smooths_awkward_prose(self):
+        self.assertEqual(
+            smooth_plan_description(
+                "Patio door opens to on turns on reading light", "open"),
+            "Patio door opens, turns on the reading light")
+
+    def test_open_provider_collapses_repeats(self):
+        self.assertEqual(
+            smooth_plan_description("Turn on on the string lights", "open"),
+            "Turn on the string lights")
+
+    def test_hosted_description_untouched(self):
+        raw = "Patio door opens to on turns on reading light"
+        self.assertEqual(smooth_plan_description(raw, "hosted"), raw)
 
 
 class BasetenConfigTest(unittest.TestCase):
@@ -317,6 +335,33 @@ class ProposeApproveTest(unittest.TestCase):
             os.environ.pop("BASETEN_API_KEY", None)
             os.environ.pop("BASETEN_MODEL", None)
 
+    def test_propose_open_display_smooths_but_keeps_raw_ir(self):
+        async def awkward(system, user, schema, model="x", api_base=None,
+                          api_key=None):
+            ir = dict(SPARK_IR)
+            ir["description"] = ("Patio door opens to on turns on "
+                                 "reading light")
+            return ir
+
+        os.environ["BASETEN_API_KEY"] = "test-key-not-real"
+        os.environ["BASETEN_MODEL"] = "dashboard-model-under-test"
+        spark_client.complete_json = awkward
+        try:
+            pid = make_bound_photo(self.client, w=505)
+            body = self.client.post("/api/automations/propose",
+                                    json={"photo_id": pid, "source_object_id": "door",
+                                          "target_object_id": "lamp", "text": "",
+                                          "provider": "open"}).json()
+            self.assertEqual(body["provider"], "open")
+            self.assertEqual(body["ir"]["description"],
+                             "Patio door opens to on turns on reading light")
+            self.assertEqual(body["display_description"],
+                             "Patio door opens, turns on the reading light")
+        finally:
+            spark_client.complete_json = fake_complete
+            os.environ.pop("BASETEN_API_KEY", None)
+            os.environ.pop("BASETEN_MODEL", None)
+
     def test_propose_conflict_warning_none_on_first_plan(self):
         pid = make_bound_photo(self.client, w=517)
         body = self.client.post("/api/automations/propose",
@@ -455,6 +500,8 @@ class ProposeApproveTest(unittest.TestCase):
                                        "text": "unlock the front door"})
             self.assertEqual(r.status_code, 422)
             self.assertIn("allowlist", r.json()["detail"])
+            self.assertTrue(r.json()["detail"].endswith("no HA write."))
+            self.assertNotIn("..", r.json()["detail"])
             after = self.client.get(
                 f"/api/automations/proposals?photo_id={pid}").json()["proposals"]
             self.assertEqual(len(after), len(before))

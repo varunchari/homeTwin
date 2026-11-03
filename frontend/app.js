@@ -512,7 +512,7 @@ document.getElementById("plan-btn").addEventListener("click", async () => {
   const providerNote = body.provider === "open"
     ? `<br /><span class="muted">Via open-weight model on Baseten (${body.model || "see host config"}) — same prompt, schema, validator and compiler as hosted.</span>`
     : `<br /><span class="muted">Via hosted ${body.model || "Muse Spark"}.</span>`;
-  div.innerHTML = `<strong>${ir.description || "Automation plan"}</strong>` +
+  div.innerHTML = `<strong>${body.display_description || ir.description || "Automation plan"}</strong>` +
     `<br />${prettyEntity(ir.trigger.entity_id)} → ${prettyEntity(ir.action.entity_id)}${cond}${delay}` +
     `<br /><span class="muted">Compiled ${body.compiled.trigger.length} trigger(s), ` +
     `${body.compiled.action.length} action step(s) in ${body.latency_ms} ms. ` +

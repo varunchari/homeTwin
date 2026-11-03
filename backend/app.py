@@ -935,7 +935,8 @@ async def propose_automation(request: Request, req: ProposeRequest) -> dict:
     """
     import time
     from automation import (IR_SCHEMA, IR_SYSTEM, apply_delay_override,
-                            build_ir_prompt, compile_ir, validate_ir)
+                            build_ir_prompt, compile_ir,
+                            smooth_plan_description, validate_ir)
     from spark_client import (SPARK_MODEL, SparkError, complete_json,
                               open_provider_config)
     import store as store_module
@@ -1005,7 +1006,10 @@ async def propose_automation(request: Request, req: ProposeRequest) -> dict:
         req.photo_id, req.source_object_id, req.target_object_id, req.text, ir,
         compile_ir(ir, alias=f"HomeTwin {req.source_object_id} to {req.target_object_id}"))
     proposal = store_module.get_proposal(proposal_id)
+    display_description = smooth_plan_description(ir.get("description", ""),
+                                                  req.provider)
     return {"proposal_id": proposal_id, "ir": ir,
+            "display_description": display_description,
             "compiled": proposal["compiled"], "latency_ms": latency_ms,
             "approval_required": True, "provider": req.provider,
             "model": model_name, "conflict_warning": conflict_warning}
