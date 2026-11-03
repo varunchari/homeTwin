@@ -112,7 +112,17 @@ class MatchTest(unittest.TestCase):
 
     def test_normalize(self):
         self.assertEqual(normalize_transcript("  When, the door OPENS!  "),
-                         "when the door opens")
+                         "when door opens")
+
+    def test_the_less_phrasings_match(self):
+        self.assertEqual(match_utterance("Turn on reading light")["kind"],
+                         "tap-control")
+        self.assertEqual(match_utterance(
+            "when door opens turn reading light on")["kind"],
+            "pattern1")
+        self.assertEqual(match_utterance(
+            "when patio door opens after sunset turn string lights on")["kind"],
+            "pattern2")
 
 
 class TranscriptShapeTest(unittest.TestCase):

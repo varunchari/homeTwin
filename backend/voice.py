@@ -112,11 +112,12 @@ async def transcribe_audio(audio_bytes: bytes, mime: str = "audio/wav") -> str:
 
 
 def normalize_transcript(text: str) -> str:
-    """Lowercase, drop punctuation, collapse spaces. Exact-phrase
-    matching on the result keeps the supported set closed."""
+    """Lowercase, drop punctuation and the filler word "the", collapse
+    spaces. Speakers naturally say "reading light" or "the reading
+    light"; both must hit the same closed set of phrasings."""
     text = text.lower()
     text = re.sub(r"[^a-z0-9 ]+", " ", text)
-    return " ".join(text.split())
+    return " ".join(w for w in text.split() if w != "the")
 
 
 # Each entry: accepted normalized phrasings -> what the UI does next.
@@ -181,9 +182,12 @@ SUPPORTED_UTTERANCES = [
 
 
 def match_utterance(transcript: str) -> dict | None:
-    """Return the supported utterance for a transcript, or None."""
+    """Return the supported utterance for a transcript, or None.
+    Phrasings are normalized before comparing, so the lists below may
+    keep natural "the"-ful wording for readability."""
     normalized = normalize_transcript(transcript or "")
     for utterance in SUPPORTED_UTTERANCES:
-        if normalized in utterance["phrasings"]:
+        if normalized in [normalize_transcript(p)
+                           for p in utterance["phrasings"]]:
             return utterance
     return None
