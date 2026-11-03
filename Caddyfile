@@ -1,3 +1,9 @@
 {$SITE_ADDRESS} {
 	reverse_proxy backend:8000
 }
+
+# Local SSH-tunnel access for mic testing: http://localhost:<forwarded-port>
+# is a secure context, so getUserMedia works without HTTPS.
+http://localhost {
+	reverse_proxy backend:8000
+}
